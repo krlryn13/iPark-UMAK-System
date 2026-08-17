@@ -1,0 +1,23 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Environment Variables & Passwords (IMPORTANT)
+.env
+**/.env
+*.env
+
+# Build outputs
+dist
+build
+**/dist
+
+# Uploaded documents & logs
+backend/uploads/documents/*
+!backend/uploads/documents/.gitkeep
+*.log
+
+# IDE & OS files
+.DS_Store
+.vscode
+.idea
