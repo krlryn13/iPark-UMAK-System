@@ -202,7 +202,7 @@ export const useParkingData = () => {
     };
 
     fetchParkingData();
-    const interval = setInterval(fetchParkingData, 5000);
+    const interval = setInterval(fetchParkingData, 15000);
     return () => clearInterval(interval);
   }, []);
 

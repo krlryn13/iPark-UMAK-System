@@ -33,4 +33,55 @@ const findById = (id, callback) => {
     db.query('SELECT id, name, email, role, is_verified, created_at FROM users WHERE id = ?', [id], callback);
 };
 
-module.exports = { findByEmail, createUser, verifyUserCode, updateVerificationCode, findById };
+const incrementFailedAttempts = (email, callback) => {
+    db.query(
+        'UPDATE users SET failed_login_attempts = failed_login_attempts + 1 WHERE email = ?',
+        [email],
+        callback
+    );
+};
+
+const resetFailedAttempts = (email, callback) => {
+    db.query(
+        'UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE email = ?',
+        [email],
+        callback
+    );
+};
+
+const lockAccount = (email, lockMinutes, callback) => {
+    db.query(
+        'UPDATE users SET locked_until = DATE_ADD(NOW(), INTERVAL ? MINUTE), failed_login_attempts = 0 WHERE email = ?',
+        [lockMinutes, email],
+        callback
+    );
+};
+
+const requestUnlock = (email, callback) => {
+    db.query(
+        'UPDATE users SET unlock_requested = 1, unlock_requested_at = NOW() WHERE email = ?',
+        [email],
+        callback
+    );
+};
+
+const getAllUsersAdmin = (callback) => {
+    db.query(
+        'SELECT id, name, email, role, is_verified, failed_login_attempts, locked_until, unlock_requested, unlock_requested_at, created_at FROM users ORDER BY created_at DESC',
+        callback
+    );
+};
+
+const adminUnlockUser = (userId, callback) => {
+    db.query(
+        'UPDATE users SET locked_until = NULL, failed_login_attempts = 0, unlock_requested = 0, unlock_requested_at = NULL WHERE id = ?',
+        [userId],
+        callback
+    );
+};
+
+module.exports = {
+    findByEmail, createUser, verifyUserCode, updateVerificationCode, findById,
+    incrementFailedAttempts, resetFailedAttempts, lockAccount,
+    requestUnlock, getAllUsersAdmin, adminUnlockUser
+};

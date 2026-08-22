@@ -512,9 +512,71 @@ const sendGuestPassStatusEmail = async (toEmail, guestName, status, passCode, ev
   }
 };
 
+/**
+ * Sends notification email when OHSO Admin unlocks a locked account.
+ */
+const sendAccountUnlockedEmail = async (toEmail, userName) => {
+  try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
+
+    const mailOptions = {
+      from: `"iPark UMAK - OHSO" <${process.env.EMAIL_USER}>`,
+      replyTo: process.env.EMAIL_USER,
+      to: toEmail,
+      subject: `iPark UMAK — Account Unlocked Notice`,
+      text: `Hello ${userName || 'Heron'},\n\nYour iPark UMAK account (${toEmail}) has been UNLOCKED by OHSO Admin.\n\nYou may now sign in using your registered email address and password.\n\nThank you,\nUniversity of Makati - OHSO Security`,
+      html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Account Unlocked</title></head>
+<body style="margin:0;padding:0;background-color:#EEF2F7;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #DDE3EE;">
+          <tr>
+            <td style="background:#0A1F5C;padding:24px 32px;color:#ffffff;">
+              <span style="font-size:20px;font-weight:900;">iPark <span style="color:#F5821F;">UMAK</span></span>
+              <p style="margin:4px 0 0;font-size:11px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1px;">Account Security Notice</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 10px;font-size:20px;color:#15803D;">Account Unlocked Successfully</h2>
+              <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;">
+                Hello <strong>${userName || 'Heron'}</strong>, your iPark UMAK account (<strong>${toEmail}</strong>) has been unlocked by OHSO Admin.
+              </p>
+              
+              <div style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:14px;padding:20px;margin-bottom:24px;">
+                <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:1px;">Account Status</p>
+                <p style="margin:0;font-size:18px;font-weight:900;color:#15803D;">ACTIVE — READY FOR SIGN IN</p>
+              </div>
+
+              <p style="margin:0;font-size:12px;color:#64748B;line-height:1.5;border-top:1px solid #E2E8F0;padding-top:16px;">
+                You can now log in at the iPark UMAK portal. If you did not request this, please contact OHSO immediately.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`[UNLOCK EMAIL SENT] Account unlocked email sent to ${toEmail}`);
+  } catch (err) {
+    console.error(`[UNLOCK EMAIL ERROR] Failed to send email to ${toEmail}:`, err.message);
+  }
+};
+
 module.exports = {
   sendVerificationEmail,
   sendGuestPassEmail,
   sendStickerStatusEmail,
-  sendGuestPassStatusEmail
+  sendGuestPassStatusEmail,
+  sendAccountUnlockedEmail
 };

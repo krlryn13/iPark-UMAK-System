@@ -1,20 +1,33 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useJsApiLoader, GoogleMap, MarkerF, PolylineF, InfoWindowF } from '@react-google-maps/api';
 import { getGuideForLocation, CAMPUS_GATES, UMAK_COORDINATES } from '../data/locationGuides';
+
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%',
+  borderRadius: '1rem',
+};
 
 export default function LocationTutorialModal({ isOpen, onClose, locationTarget }) {
   const [activeTab, setActiveTab] = useState('map'); // 'map' | 'steps'
   const [selectedGate, setSelectedGate] = useState(CAMPUS_GATES[0]);
   const [transportMode, setTransportMode] = useState('car'); // 'car' | 'motorcycle' | 'walk'
+  const [mapType, setMapType] = useState('hybrid'); // 'hybrid' (Satellite + Roads) | 'roadmap'
+  const [selectedMarker, setSelectedMarker] = useState(null);
+  
+  // User GPS state
   const [userGpsLocation, setUserGpsLocation] = useState(null);
   const [isLocating, setIsLocating] = useState(false);
   const [gpsMessage, setGpsMessage] = useState(null);
   const [gpsError, setGpsError] = useState(null);
 
-  const mapContainerRef = useRef(null);
-  const leafletMapRef = useRef(null);
-  const routePolylineRef = useRef(null);
-  const movingMarkerRef = useRef(null);
-  const animationIntervalRef = useRef(null);
+  const mapRef = useRef(null);
+
+  // Load Google Maps JS API
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+  });
 
   const guide = getGuideForLocation(locationTarget?.location || locationTarget?.name || locationTarget);
 
@@ -38,414 +51,402 @@ export default function LocationTutorialModal({ isOpen, onClose, locationTarget 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Leaflet Map Initialization & Route Animation
-  useEffect(() => {
-    if (!isOpen || activeTab !== 'map' || !mapContainerRef.current) return;
+  const onMapLoad = useCallback((map) => {
+    mapRef.current = map;
+  }, []);
 
-    const L = window.L;
-    if (!L) return;
+  const onMapUnmount = useCallback(() => {
+    mapRef.current = null;
+  }, []);
 
-    // Destroy existing map instance if present
-    if (leafletMapRef.current) {
-      leafletMapRef.current.remove();
-      leafletMapRef.current = null;
-    }
-
-    const map = L.map(mapContainerRef.current, {
-      zoomControl: true,
-      attributionControl: false,
-    }).setView([guide.lat, guide.lng], UMAK_COORDINATES.zoom);
-
-    leafletMapRef.current = map;
-
-    // OpenStreetMap standard tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-    }).addTo(map);
-
-    // Custom Icon Creator
-    const createCustomIcon = (faClass, colorClass, label) => L.divIcon({
-      className: 'custom-map-marker',
-      html: `
-        <div class="relative group flex items-center justify-center">
-          <div class="w-9 h-9 rounded-full ${colorClass} text-white flex items-center justify-center shadow-lg ring-4 ring-white/80 transform hover:scale-110 transition-transform">
-            <i class="fa-solid ${faClass} text-base"></i>
-          </div>
-          ${label ? `<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shadow-md">${label}</span>` : ''}
-        </div>
-      `,
-      iconSize: [36, 36],
-      iconAnchor: [18, 18],
-    });
-
-    // Destination Marker (HPSB / OHSO)
-    L.marker([guide.lat, guide.lng], {
-      icon: createCustomIcon(guide.icon, 'bg-gradient-to-r from-amber-500 to-orange-600', guide.title.split(' ')[0]),
-    }).addTo(map).bindPopup(`<b>${guide.title}</b><br/>${guide.building}`);
-
-    // Starting Gate Marker (Main Gate / Rembo Gate)
-    const gatePos = [selectedGate.lat, selectedGate.lng];
-    L.marker(gatePos, {
-      icon: createCustomIcon(selectedGate.icon, 'bg-slate-900', selectedGate.name.split(' ')[0]),
-    }).addTo(map).bindPopup(`<b>${selectedGate.name}</b>`);
-
-    // Road Waypoints: Gate -> Road Points -> HPSB Entrance Driveway -> Destination
-    const waypoints = [
-      gatePos,
-      ...guide.waypoints,
-      [guide.lat, guide.lng]
-    ];
-
-    // Animated Polyline Route following the roads
-    const polyline = L.polyline(waypoints, {
-      color: transportMode === 'motorcycle' ? '#f97316' : transportMode === 'car' ? '#10b981' : '#3b82f6',
-      weight: 6,
-      opacity: 0.85,
-      dashArray: '10, 10',
-      lineCap: 'round',
-    }).addTo(map);
-    routePolylineRef.current = polyline;
-
-    map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
-
-    // Moving Vehicle/Walker Animation Marker
-    const vehicleIconClass = transportMode === 'motorcycle'
-      ? 'fa-motorcycle'
-      : transportMode === 'car'
-        ? 'fa-car-side'
-        : 'fa-person-walking';
-
-    const vehicleBgClass = transportMode === 'motorcycle'
-      ? 'bg-orange-500 ring-orange-300'
-      : transportMode === 'car'
-        ? 'bg-emerald-600 ring-emerald-300'
-        : 'bg-blue-600 ring-blue-300';
-
-    const movingIcon = L.divIcon({
-      className: 'moving-marker-icon',
-      html: `
-        <div class="w-9 h-9 rounded-full ${vehicleBgClass} text-white flex items-center justify-center shadow-2xl ring-4 transform transition-all duration-300">
-          <i class="fa-solid ${vehicleIconClass} text-base animate-pulse"></i>
-        </div>
-      `,
-      iconSize: [36, 36],
-      iconAnchor: [18, 18],
-    });
-
-    let currentWaypointIdx = 0;
-    const movingMarker = L.marker(waypoints[0], { icon: movingIcon }).addTo(map);
-    movingMarkerRef.current = movingMarker;
-
-    if (animationIntervalRef.current) clearInterval(animationIntervalRef.current);
-
-    animationIntervalRef.current = setInterval(() => {
-      currentWaypointIdx = (currentWaypointIdx + 1) % waypoints.length;
-      movingMarker.setLatLng(waypoints[currentWaypointIdx]);
-    }, 1100);
-
-    return () => {
-      if (animationIntervalRef.current) clearInterval(animationIntervalRef.current);
-      if (leafletMapRef.current) {
-        leafletMapRef.current.remove();
-        leafletMapRef.current = null;
-      }
-    };
-  }, [isOpen, activeTab, selectedGate, transportMode, guide]);
-
-  // Handle User Geolocation Request with distance calculation
-  const handleGetGps = () => {
-    setIsLocating(true);
-    setGpsError(null);
-    setGpsMessage(null);
-
+  // Request Live GPS Location
+  const handleLocateUser = () => {
     if (!navigator.geolocation) {
       setGpsError('Geolocation is not supported by your browser.');
-      setIsLocating(false);
       return;
     }
 
+    setIsLocating(true);
+    setGpsError(null);
+    setGpsMessage('Locating your position...');
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
-        setUserGpsLocation({ lat: latitude, lng: longitude });
+        const pos = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        setUserGpsLocation(pos);
         setIsLocating(false);
+        setGpsMessage('GPS Location Acquired!');
 
-        // Distance to UMak Main Gate in KM (Haversine formula)
-        const R = 6371; // Earth radius in km
-        const dLat = (14.56360 - latitude) * (Math.PI / 180);
-        const dLng = (121.05560 - longitude) * (Math.PI / 180);
-        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(latitude * (Math.PI / 180)) * Math.cos(14.56360 * (Math.PI / 180)) *
-          Math.sin(dLng / 2) * Math.sin(dLng / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const distanceKm = (R * c).toFixed(1);
-
-        setGpsMessage(`GPS position detected (${distanceKm} km from UMak Campus). Displaying route to destination.`);
-
-        if (leafletMapRef.current) {
-          const L = window.L;
-          const userIcon = L.divIcon({
-            className: 'user-gps-marker',
-            html: `
-              <div class="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg ring-4 ring-blue-300 animate-pulse">
-                <i class="fa-solid fa-location-crosshairs text-base"></i>
-              </div>
-            `,
-            iconSize: [36, 36],
-            iconAnchor: [18, 18],
-          });
-          L.marker([latitude, longitude], { icon: userIcon })
-            .addTo(leafletMapRef.current)
-            .bindPopup(`<b>Your GPS Location</b><br/>${distanceKm} km from UMak Campus`)
-            .openPopup();
-
-          leafletMapRef.current.setView([latitude, longitude], 16);
+        if (mapRef.current) {
+          mapRef.current.panTo(pos);
+          mapRef.current.setZoom(19);
         }
       },
-      (error) => {
-        setGpsError('Unable to retrieve exact GPS location. Please check browser permissions.');
+      (err) => {
         setIsLocating(false);
+        setGpsError('Unable to retrieve location. Please check browser permissions.');
       },
-      { timeout: 10000, enableHighAccuracy: true }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
+  };
+
+  // Convert Waypoints array to Google Maps LatLng Objects
+  const routePolylinePath = (guide.waypoints || []).map(wp => ({
+    lat: Array.isArray(wp) ? wp[0] : wp.lat,
+    lng: Array.isArray(wp) ? wp[1] : wp.lng,
+  }));
+
+  // Open Google Maps app for turn-by-turn navigation
+  const handleOpenGoogleMapsApp = () => {
+    const destLat = guide.lat;
+    const destLng = guide.lng;
+    const navUrl = guide.googleMapsUrl || `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}`;
+    window.open(navUrl, '_blank', 'noopener,noreferrer');
   };
 
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md transition-opacity duration-300 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="location-tutorial-title"
-    >
-      <div className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden text-slate-800 dark:text-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden text-slate-800">
         
-        {/* Modal Header */}
-        <div className="relative px-6 py-5 bg-gradient-to-r from-slate-900 via-umak-blue to-slate-900 text-white flex items-center justify-between border-b border-slate-700/50">
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/30 text-amber-400 flex items-center justify-center text-xl shadow-inner">
-              <i className={`fa-solid ${guide.icon}`}></i>
+        {/* Header */}
+        <div className="bg-gradient-to-r from-umak-navy via-umak-navydark to-slate-900 text-white p-5 sm:p-6 flex items-start justify-between relative overflow-hidden flex-shrink-0">
+          <div className="space-y-1 z-10">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-${guide.color}-500/20 text-${guide.color}-300 border border-${guide.color}-400/30`}>
+                {guide.badge}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-white/10 text-slate-300 border border-white/10">
+                <i className="fa-brands fa-google mr-1"></i> Google Maps Navigation
+              </span>
             </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                  {guide.badge}
-                </span>
-                <span className="text-xs text-slate-300">UMak Campus Navigation</span>
-              </div>
-              <h2 id="location-tutorial-title" className="text-xl font-bold tracking-tight text-white mt-0.5">
-                How to Get To: {guide.title}
-              </h2>
-            </div>
+            <h2 className="text-xl sm:text-2xl font-extrabold font-display flex items-center gap-2">
+              <i className={`fa-solid ${guide.icon} text-umak-orange text-lg sm:text-xl`}></i>
+              {guide.title}
+            </h2>
+            <p className="text-xs text-slate-300 flex items-center gap-1.5">
+              <i className="fa-solid fa-building text-umak-orange/80"></i>
+              {guide.building}
+            </p>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-800/80 hover:bg-red-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
-            aria-label="Close location tutorial"
+            className="z-10 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer border border-white/10"
+            aria-label="Close modal"
           >
             <i className="fa-solid fa-xmark text-lg"></i>
           </button>
         </div>
 
-        {/* Tab Switcher & Navigation Toolbar */}
-        <div className="px-6 py-3 bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center space-x-2 bg-slate-200 dark:bg-slate-900 p-1 rounded-xl">
+        {/* Tab Switcher & Navigation Bar */}
+        <div className="bg-slate-100 p-2 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+          <div className="flex bg-white rounded-xl p-1 border border-slate-200 shadow-sm">
             <button
+              type="button"
               onClick={() => setActiveTab('map')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'map'
-                  ? 'bg-amber-500 text-slate-950 shadow-md'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-umak-navy text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <i className="fa-solid fa-map-location-dot"></i>
-              <span>Interactive Map & Route</span>
+              <i className="fa-solid fa-map-location-dot text-umak-orange"></i>
+              <span>Interactive Google Map</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('steps')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'steps'
-                  ? 'bg-amber-500 text-slate-950 shadow-md'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-umak-navy text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <i className="fa-solid fa-list-check"></i>
-              <span>Step-by-Step Guide</span>
+              <i className="fa-solid fa-list-ol text-emerald-400"></i>
+              <span>Step-by-Step Directions ({guide.steps.length})</span>
             </button>
           </div>
 
-          {/* Quick External Navigation Button */}
-          <a
-            href={userGpsLocation ? `https://www.google.com/maps/dir/?api=1&origin=${userGpsLocation.lat},${userGpsLocation.lng}&destination=${guide.lat},${guide.lng}` : guide.googleMapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-md hover:shadow-lg transition-all group cursor-pointer"
-          >
-            <i className="fa-solid fa-diamond-turn-right group-hover:scale-110 transition-transform"></i>
-            <span>Open Live Google Maps</span>
-            <i className="fa-solid fa-arrow-up-right-from-square text-xs opacity-75"></i>
-          </a>
+          {/* Transport Mode Switcher */}
+          <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 text-xs">
+            <button
+              type="button"
+              onClick={() => setTransportMode('car')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                transportMode === 'car' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <i className="fa-solid fa-car"></i> Car
+            </button>
+            <button
+              type="button"
+              onClick={() => setTransportMode('motorcycle')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                transportMode === 'motorcycle' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <i className="fa-solid fa-motorcycle"></i> Motorcycle
+            </button>
+            <button
+              type="button"
+              onClick={() => setTransportMode('walk')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                transportMode === 'walk' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <i className="fa-solid fa-person-walking"></i> Walk
+            </button>
+          </div>
         </div>
 
-        {/* Tab Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          
+        {/* Modal Body */}
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+
+          {/* TAB 1: INTERACTIVE GOOGLE MAP */}
           {activeTab === 'map' && (
             <div className="space-y-4">
               
-              {/* Transport Vehicle Mode & Entry Selector Bar */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 items-end">
-                
-                {/* Vehicle Mode Toggle */}
-                <div className="md:col-span-5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                    Transport Vehicle Figure:
-                  </label>
-                  <div className="flex items-center bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-300 dark:border-slate-700">
-                    <button
-                      type="button"
-                      onClick={() => setTransportMode('car')}
-                      className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-                        transportMode === 'car'
-                          ? 'bg-emerald-600 text-white shadow-sm'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      <i className="fa-solid fa-car-side"></i>
-                      <span>Car</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTransportMode('motorcycle')}
-                      className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-                        transportMode === 'motorcycle'
-                          ? 'bg-orange-500 text-white shadow-sm'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      <i className="fa-solid fa-motorcycle"></i>
-                      <span>Motorcycle</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTransportMode('walk')}
-                      className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
-                        transportMode === 'walk'
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      <i className="fa-solid fa-person-walking"></i>
-                      <span>Walking</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Entry Gate Select */}
-                <div className="md:col-span-4">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                    Starting Entry Gate:
-                  </label>
+              {/* Map Controls Header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-700">Campus Entrance Gate:</span>
                   <select
                     value={selectedGate.id}
                     onChange={(e) => {
                       const gate = CAMPUS_GATES.find(g => g.id === e.target.value);
-                      if (gate) setSelectedGate(gate);
+                      if (gate) {
+                        setSelectedGate(gate);
+                        if (mapRef.current) {
+                          mapRef.current.panTo({ lat: gate.lat, lng: gate.lng });
+                        }
+                      }
                     }}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs rounded-xl px-3 py-2 font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-umak-navy focus:outline-none focus:border-umak-orange shadow-sm cursor-pointer"
                   >
-                    {CAMPUS_GATES.map((gate) => (
-                      <option key={gate.id} value={gate.id}>
-                        {gate.name}
-                      </option>
+                    {CAMPUS_GATES.map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* GPS Button */}
-                <div className="md:col-span-3">
+                {/* Map Type Switcher (Satellite vs Roadmap) */}
+                <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 text-xs">
                   <button
-                    onClick={handleGetGps}
-                    disabled={isLocating}
-                    className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow transition-all disabled:opacity-50 cursor-pointer"
+                    type="button"
+                    onClick={() => setMapType('hybrid')}
+                    className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      mapType === 'hybrid' ? 'bg-umak-navy text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    }`}
                   >
-                    <i className={`fa-solid ${isLocating ? 'fa-spinner fa-spin' : 'fa-location-crosshairs'}`}></i>
-                    <span>{isLocating ? 'Locating...' : 'My GPS'}</span>
+                    <i className="fa-solid fa-satellite"></i> Satellite
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMapType('roadmap')}
+                    className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      mapType === 'roadmap' ? 'bg-umak-navy text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <i className="fa-solid fa-map"></i> Map
                   </button>
                 </div>
+
+                {/* GPS Locate Me Button */}
+                <button
+                  type="button"
+                  onClick={handleLocateUser}
+                  disabled={isLocating}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isLocating ? (
+                    <>
+                      <i className="fa-solid fa-spinner animate-spin"></i> Locating...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-location-crosshairs"></i> My Location (GPS)
+                    </>
+                  )}
+                </button>
               </div>
 
+              {/* GPS Status Message */}
               {gpsMessage && (
-                <div className="p-3 bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs rounded-xl flex items-center space-x-2">
-                  <i className="fa-solid fa-location-dot"></i>
+                <div className="p-2.5 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <i className="fa-solid fa-circle-check text-blue-600"></i>
                   <span>{gpsMessage}</span>
                 </div>
               )}
-
               {gpsError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs rounded-xl flex items-center space-x-2">
-                  <i className="fa-solid fa-triangle-exclamation"></i>
+                <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <i className="fa-solid fa-circle-exclamation text-red-500"></i>
                   <span>{gpsError}</span>
                 </div>
               )}
 
-              {/* Leaflet Map Canvas */}
-              <div className="relative w-full h-80 rounded-2xl overflow-hidden border border-slate-300 dark:border-slate-700 shadow-inner">
-                <div ref={mapContainerRef} className="w-full h-full z-10"></div>
+              {/* MAP CONTAINER */}
+              <div className="h-[380px] sm:h-[440px] w-full rounded-2xl overflow-hidden border border-slate-300 shadow-inner relative bg-slate-200">
+                {!isLoaded ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center space-y-3 bg-slate-100">
+                    <i className="fa-solid fa-spinner animate-spin text-3xl text-umak-orange"></i>
+                    <p className="text-xs font-bold text-slate-600">Loading Google Maps Satellite Engine...</p>
+                  </div>
+                ) : loadError ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-2 bg-red-50 text-red-700">
+                    <i className="fa-solid fa-circle-exclamation text-3xl text-red-500"></i>
+                    <p className="font-bold text-sm">Failed to load Google Maps API.</p>
+                    <p className="text-xs">Please ensure your Google Maps API Key is valid and enabled for Maps JavaScript API.</p>
+                  </div>
+                ) : (
+                  <GoogleMap
+                    mapContainerStyle={mapContainerStyle}
+                    center={{ lat: guide.lat, lng: guide.lng }}
+                    zoom={18.5}
+                    mapTypeId={mapType}
+                    onLoad={onMapLoad}
+                    onUnmount={onMapUnmount}
+                    options={{
+                      tilt: 45,
+                      zoomControl: true,
+                      streetViewControl: false,
+                      mapTypeControl: false,
+                      fullscreenControl: true,
+                    }}
+                  >
+                    {/* Route Polyline Path */}
+                    {routePolylinePath.length > 1 && (
+                      <PolylineF
+                        path={routePolylinePath}
+                        options={{
+                          strokeColor: '#F5821F',
+                          strokeOpacity: 0.9,
+                          strokeWeight: 6,
+                        }}
+                      />
+                    )}
 
-                {/* Map Overlay Badge showing vehicle type */}
-                <div className="absolute top-3 right-3 z-20 bg-slate-900/90 text-white text-xs font-semibold px-3 py-1.5 rounded-xl shadow-lg border border-slate-700 backdrop-blur-md flex items-center space-x-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                  <span className="capitalize">Animated {transportMode} Following Campus Road Path</span>
+                    {/* Destination Marker */}
+                    <MarkerF
+                      position={{ lat: guide.lat, lng: guide.lng }}
+                      title={guide.title}
+                      onClick={() => setSelectedMarker({ type: 'destination', ...guide })}
+                    />
+
+                    {/* Campus Gates Markers */}
+                    {CAMPUS_GATES.map((gate) => (
+                      <MarkerF
+                        key={gate.id}
+                        position={{ lat: gate.lat, lng: gate.lng }}
+                        title={gate.name}
+                        onClick={() => setSelectedMarker({ type: 'gate', ...gate })}
+                      />
+                    ))}
+
+                    {/* User GPS Location Marker */}
+                    {userGpsLocation && (
+                      <MarkerF
+                        position={userGpsLocation}
+                        title="Your Current GPS Position"
+                        onClick={() => setSelectedMarker({ type: 'user', title: 'Your Position', lat: userGpsLocation.lat, lng: userGpsLocation.lng })}
+                      />
+                    )}
+
+                    {/* InfoWindow Popup */}
+                    {selectedMarker && (
+                      <InfoWindowF
+                        position={{ lat: selectedMarker.lat, lng: selectedMarker.lng }}
+                        onCloseClick={() => setSelectedMarker(null)}
+                      >
+                        <div className="p-1 max-w-xs space-y-1 font-sans text-slate-800">
+                          <h4 className="font-bold text-xs text-umak-navy">
+                            {selectedMarker.title || selectedMarker.name}
+                          </h4>
+                          <p className="text-[11px] text-slate-600 leading-tight">
+                            {selectedMarker.description || selectedMarker.building || 'Selected Campus Point'}
+                          </p>
+                        </div>
+                      </InfoWindowF>
+                    )}
+                  </GoogleMap>
+                )}
+
+                {/* Satellite Badge Overlay */}
+                <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md text-white px-3 py-1 rounded-xl text-[11px] font-bold border border-white/20 shadow-md flex items-center gap-1.5 pointer-events-none z-10">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>UMak Campus Satellite GPS</span>
                 </div>
               </div>
+
+              {/* Direct Open in Google Maps App Button */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-gradient-to-r from-umak-navy to-umak-navydark p-4 rounded-2xl text-white shadow-md">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-extrabold flex items-center gap-1.5">
+                    <i className="fa-brands fa-google text-amber-400"></i> Turn-by-Turn GPS Driving & Walking
+                  </h4>
+                  <p className="text-xs text-slate-300">
+                    Open turn-by-turn navigation directly in your phone's Google Maps app.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenGoogleMapsApp}
+                  className="px-4 py-2.5 bg-umak-orange hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap flex-shrink-0"
+                >
+                  <i className="fa-solid fa-diamond-turn-right text-sm"></i>
+                  <span>Start Navigation in Google Maps</span>
+                </button>
+              </div>
+
             </div>
           )}
 
+          {/* TAB 2: STEP-BY-STEP DIRECTIONS */}
           {activeTab === 'steps' && (
-            <div className="space-y-6">
-              <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-2xl flex items-start space-x-3">
-                <i className="fa-solid fa-circle-info text-amber-600 dark:text-amber-400 text-lg mt-0.5"></i>
-                <div>
-                  <h4 className="text-sm font-bold text-amber-900 dark:text-amber-300">Destination: {guide.building}</h4>
-                  <p className="text-xs text-amber-800 dark:text-amber-400/90 mt-0.5">
-                    Follow the numbered steps below to navigate smoothly from campus entrance.
-                  </p>
+            <div className="space-y-4">
+              <div className="bg-umak-navy/5 border border-umak-navy/15 p-4 rounded-2xl flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold text-umak-orange uppercase tracking-wider">Campus Gate Selected</span>
+                  <h4 className="font-extrabold text-sm text-umak-navy">{selectedGate.name}</h4>
                 </div>
+                <span className="px-3 py-1 rounded-xl bg-white border border-slate-200 text-slate-700 font-extrabold text-xs">
+                  <i className="fa-solid fa-route text-amber-500 mr-1"></i> {guide.steps.length} Steps
+                </span>
               </div>
 
-              {/* Step List Timeline */}
-              <div className="relative border-l-2 border-amber-500/40 ml-4 pl-6 space-y-6">
-                {guide.steps.map((item, idx) => (
-                  <div key={idx} className="relative group">
-                    {/* Timeline Node */}
-                    <div className="absolute -left-[35px] top-0 w-8 h-8 rounded-full bg-amber-500 text-slate-950 font-bold text-sm flex items-center justify-center shadow-lg ring-4 ring-white dark:ring-slate-900">
-                      {item.step}
+              <div className="space-y-3">
+                {guide.steps.map((s) => (
+                  <div
+                    key={s.step}
+                    className="p-4 bg-slate-50 border border-slate-200 hover:border-umak-orange/40 rounded-2xl transition-all flex items-start gap-4"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-umak-navy to-umak-navydark text-white font-black text-sm flex items-center justify-center flex-shrink-0 shadow-sm">
+                      {s.step}
                     </div>
-
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-amber-400/50 transition-colors">
-                      <div className="flex items-center space-x-2 text-amber-600 dark:text-amber-400 text-sm font-semibold mb-1">
-                        <i className={`fa-solid ${item.icon}`}></i>
-                        <span>{item.title}</span>
-                      </div>
-                      <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                        {item.desc}
-                      </p>
+                    <div className="space-y-1 flex-1">
+                      <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i className={`fa-solid ${s.icon} text-umak-orange text-xs`}></i>
+                        {s.title}
+                      </h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">{s.desc}</p>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Campus Pro Tips */}
+              {/* Tips Section */}
               {guide.tips && guide.tips.length > 0 && (
-                <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <h5 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 flex items-center space-x-1.5">
-                    <i className="fa-solid fa-lightbulb text-amber-400"></i>
-                    <span>Campus Navigation Tips</span>
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
+                  <h5 className="font-bold text-xs text-amber-800 flex items-center gap-1.5">
+                    <i className="fa-solid fa-lightbulb text-amber-500"></i> Helpful Campus Security Tips:
                   </h5>
-                  <ul className="space-y-1 text-xs text-slate-700 dark:text-slate-300 list-disc list-inside">
+                  <ul className="list-disc list-inside text-xs text-amber-900/80 space-y-1 font-medium">
                     {guide.tips.map((tip, idx) => (
                       <li key={idx}>{tip}</li>
                     ))}
@@ -458,17 +459,16 @@ export default function LocationTutorialModal({ isOpen, onClose, locationTarget 
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center space-x-1">
-            <i className="fa-solid fa-location-dot text-amber-500"></i>
-            <span>University of Makati, West Rembo, Taguig</span>
-          </div>
-
+        <div className="bg-slate-100 p-4 border-t border-slate-200 flex items-center justify-between text-xs flex-shrink-0">
+          <span className="text-slate-500 font-medium hidden sm:inline">
+            University of Makati — Smart Campus Parking & Navigation
+          </span>
           <button
+            type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-sm transition-colors cursor-pointer"
+            className="ml-auto px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-all cursor-pointer"
           >
-            Got it, thanks!
+            Close
           </button>
         </div>
 

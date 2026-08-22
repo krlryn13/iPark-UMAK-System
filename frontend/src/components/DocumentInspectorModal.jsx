@@ -7,22 +7,23 @@ export const DocumentInspectorModal = ({ isOpen, onClose, application }) => {
   const docs = [
     { title: 'Student / Faculty ID Photo', path: application.student_id_doc, icon: 'fa-graduation-cap' },
     { title: 'LTO Official Receipt & Registration (OR/CR)', path: application.or_cr_doc, icon: 'fa-file-invoice' },
-    { title: 'Valid Driver’s License Photo', path: application.license_doc, icon: 'fa-id-card' }
+    { title: 'Valid Driver’s License Photo', path: application.license_doc, icon: 'fa-id-card' },
+    { title: 'Proof of Payment Screenshot', path: application.payment_proof_doc, icon: 'fa-receipt' }
   ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
-      <div className="bg-white border border-slate-200 rounded-3xl max-w-3xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200 text-slate-800 relative overflow-hidden max-h-[90vh] flex flex-col justify-between">
+      <div className="bg-white border border-slate-200 rounded-3xl max-w-5xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200 text-slate-800 relative overflow-hidden max-h-[90vh] flex flex-col justify-between">
         
         {/* Modal Header */}
         <div className="flex justify-between items-center border-b border-slate-100 pb-4">
           <div>
             <span className="text-xs font-extrabold text-umak-orange uppercase tracking-wider">OHSO Security Inspector</span>
             <h3 className="text-xl font-bold font-display text-slate-900">
-              Uploaded Documents: {application.applicant_name}
+              Uploaded Documents & Payment Proof: {application.applicant_name}
             </h3>
             <p className="text-xs text-slate-500 font-mono">
-              Student ID: {application.student_id_num} | Plate: {application.plate_number}
+              Student ID: {application.student_id_num} | Plate: {application.plate_number} | Ref: {application.payment_ref_no}
             </p>
           </div>
           <button
@@ -33,11 +34,22 @@ export const DocumentInspectorModal = ({ isOpen, onClose, application }) => {
           </button>
         </div>
 
-        {/* Documents Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 overflow-y-auto touch-scroll max-h-[70vh] pr-1">
+        {/* Documents Grid (4 Cards) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 overflow-y-auto touch-scroll max-h-[70vh] pr-1">
           {docs.map((doc, idx) => {
             const isPdf = doc.path && doc.path.toLowerCase().endsWith('.pdf');
-            const fullUrl = doc.path ? `${API_BASE_URL}${doc.path}` : null;
+            
+            // Helper to format document URL
+            const getDocUrl = (pathStr) => {
+              if (!pathStr) return null;
+              if (pathStr.startsWith('http://') || pathStr.startsWith('https://')) return pathStr;
+              if (pathStr.startsWith('/uploads/') && !pathStr.startsWith('/uploads/documents/')) {
+                return `${API_BASE_URL}/uploads/documents/${pathStr.replace('/uploads/', '')}`;
+              }
+              return `${API_BASE_URL}${pathStr}`;
+            };
+
+            const fullUrl = getDocUrl(doc.path);
 
             return (
               <div key={idx} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between space-y-3">

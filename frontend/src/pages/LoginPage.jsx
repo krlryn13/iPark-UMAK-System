@@ -18,6 +18,37 @@ export const LoginPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [lockoutInfo, setLockoutInfo] = useState(null); // { email, unlockRequested, requestLoading }
+
+  // Password strength rules (computed live)
+  const passwordRules = [
+    { label: 'At least 8 characters', passed: formData.password.length >= 8 },
+    { label: 'Contains uppercase letter (A-Z)', passed: /[A-Z]/.test(formData.password) },
+    { label: 'Contains lowercase letter (a-z)', passed: /[a-z]/.test(formData.password) },
+    { label: 'Contains a number (0-9)', passed: /[0-9]/.test(formData.password) },
+    { label: 'Contains special character (!@#$%...)', passed: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password) },
+  ];
+  const passedRuleCount = passwordRules.filter(r => r.passed).length;
+
+  // Strength meter colors
+  const strengthConfig = [
+    { label: 'Very Weak', barColor: 'bg-red-500', textColor: 'text-red-500' },
+    { label: 'Very Weak', barColor: 'bg-red-500', textColor: 'text-red-500' },
+    { label: 'Weak', barColor: 'bg-orange-500', textColor: 'text-orange-500' },
+    { label: 'Fair', barColor: 'bg-amber-500', textColor: 'text-amber-500' },
+    { label: 'Strong', barColor: 'bg-emerald-500', textColor: 'text-emerald-500' },
+    { label: 'Very Strong', barColor: 'bg-umak-navy', textColor: 'text-umak-navy' },
+  ];
+  const currentStrength = strengthConfig[passedRuleCount];
+
+  // Signup form validation state
+  const isEmailValid = formData.email.trim().toLowerCase().endsWith('@umak.edu.ph');
+  const isNameValid = formData.name.trim().split(/\s+/).length >= 2;
+  const isPasswordStrong = passedRuleCount === 5;
+  const isConfirmMatch = formData.password === formData.confirmPassword && formData.confirmPassword.length > 0;
+  const isSignupReady = isEmailValid && isNameValid && isPasswordStrong && isConfirmMatch;
 
   // Redirect if user is already logged in
   if (currentUser) {
@@ -64,15 +95,15 @@ export const LoginPage = () => {
     }
 
     if (authMode === 'signup') {
-      if (!formData.name.trim()) {
-        setError('Please enter your full name.');
+      if (!formData.name.trim() || !isNameValid) {
+        setError('Please enter your complete first and last name.');
         return;
       }
-      if (formData.password.length < 6) {
-        setError('Password must be at least 6 characters long.');
+      if (!isPasswordStrong) {
+        setError('Password does not meet security requirements. Please check all rules below.');
         return;
       }
-      if (formData.password !== formData.confirmPassword) {
+      if (!isConfirmMatch) {
         setError('Passwords do not match. Please check and try again.');
         return;
       }
@@ -98,6 +129,16 @@ export const LoginPage = () => {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 423 || data.isLocked) {
+          setLockoutInfo({
+            email: data.email || cleanEmail,
+            unlockRequested: !!data.unlockRequested,
+            requestLoading: false
+          });
+        } else {
+          setLockoutInfo(null);
+        }
+
         if (data.requiresVerification) {
           setVerifyEmail(data.email || cleanEmail);
           setOtpInput(['', '', '', '', '', '']);
@@ -198,6 +239,33 @@ export const LoginPage = () => {
     }
   };
 
+  // Request Account Unlock from Admin
+  const handleRequestUnlock = async () => {
+    if (!lockoutInfo?.email) return;
+    setLockoutInfo(prev => ({ ...prev, requestLoading: true }));
+    setError('');
+    setSuccess('');
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/request-unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: lockoutInfo.email })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess('Unlock request submitted! An OHSO Admin has been notified to unlock your account.');
+        setLockoutInfo(prev => ({ ...prev, unlockRequested: true, requestLoading: false }));
+      } else {
+        setError(data.error || 'Failed to send unlock request.');
+        setLockoutInfo(prev => ({ ...prev, requestLoading: false }));
+      }
+    } catch (err) {
+      setError('Connection error. Could not send unlock request.');
+      setLockoutInfo(prev => ({ ...prev, requestLoading: false }));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between selection:bg-amber-500 selection:text-white">
       <Navbar />
@@ -265,9 +333,40 @@ export const LoginPage = () => {
 
           {/* Feedback Alerts */}
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-start gap-2 animate-in fade-in">
-              <i className="fa-solid fa-circle-exclamation text-red-500 mt-0.5 flex-shrink-0"></i>
-              <span>{error}</span>
+            <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs space-y-2 animate-in fade-in">
+              <div className="flex items-start gap-2">
+                <i className="fa-solid fa-circle-exclamation text-red-500 mt-0.5 flex-shrink-0 text-sm"></i>
+                <span>{error}</span>
+              </div>
+
+              {/* Unlock Request Button if account is locked */}
+              {lockoutInfo && (
+                <div className="pt-2 border-t border-red-200/60 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-red-600 font-medium">
+                    {lockoutInfo.unlockRequested ? '✓ Unlock request pending admin review' : 'Need help logging in?'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRequestUnlock}
+                    disabled={lockoutInfo.unlockRequested || lockoutInfo.requestLoading}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {lockoutInfo.requestLoading ? (
+                      <>
+                        <i className="fa-solid fa-spinner animate-spin"></i> Sending...
+                      </>
+                    ) : lockoutInfo.unlockRequested ? (
+                      <>
+                        <i className="fa-solid fa-clock"></i> Request Sent
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-key"></i> Request Admin Unlock
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -298,6 +397,14 @@ export const LoginPage = () => {
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-umak-orange focus:bg-white transition-colors"
                     />
                   </div>
+                  {formData.name.length > 0 && (
+                    <div className={`flex items-center gap-1.5 mt-1.5 text-[11px] font-semibold ${
+                      isNameValid ? 'text-emerald-600' : 'text-red-500'
+                    }`}>
+                      <i className={`fa-solid ${isNameValid ? 'fa-circle-check' : 'fa-circle-xmark'} text-[10px]`}></i>
+                      <span>{isNameValid ? 'Full name accepted' : 'Enter your complete first and last name'}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -319,49 +426,113 @@ export const LoginPage = () => {
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-umak-orange focus:bg-white transition-colors"
                   />
                 </div>
+                {formData.email.length > 0 && (
+                  <div className={`flex items-center gap-1.5 mt-1.5 text-[11px] font-semibold transition-colors ${
+                    isEmailValid ? 'text-emerald-600' : 'text-red-500'
+                  }`}>
+                    <i className={`fa-solid ${isEmailValid ? 'fa-circle-check' : 'fa-circle-xmark'} text-[10px]`}></i>
+                    <span>{isEmailValid ? 'Valid UMak email domain' : 'Must end with @umak.edu.ph'}</span>
+                  </div>
+                )}
               </div>
 
-              {/* Password Field */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
                 <div className="relative">
                   <i className="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     name="password"
                     value={formData.password}
                     onChange={handleInputChange}
                     placeholder="••••••••"
                     required
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-umak-orange focus:bg-white transition-colors"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-10 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-umak-orange focus:bg-white transition-colors"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-umak-navy transition-colors cursor-pointer p-0.5"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                  </button>
                 </div>
+
+                {/* Password Strength Meter — Sign Up only */}
+                {authMode === 'signup' && formData.password.length > 0 && (
+                  <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Password Strength</span>
+                      <span className={`text-[11px] font-extrabold tracking-wide ${currentStrength.textColor}`}>
+                        {currentStrength.label}
+                      </span>
+                    </div>
+                    <div className="flex gap-1">
+                      {[0, 1, 2, 3, 4].map(i => (
+                        <div
+                          key={i}
+                          className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                            i < passedRuleCount ? currentStrength.barColor : 'bg-slate-200'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 gap-1">
+                      {passwordRules.map((rule, idx) => (
+                        <div key={idx} className={`flex items-center gap-2 text-[11px] font-medium transition-colors ${
+                          rule.passed ? 'text-emerald-600' : 'text-slate-400'
+                        }`}>
+                          <i className={`fa-solid ${rule.passed ? 'fa-circle-check' : 'fa-circle'} text-[9px] ${rule.passed ? 'text-emerald-500' : 'text-slate-300'}`}></i>
+                          <span>{rule.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Confirm Password field for Sign Up */}
               {authMode === 'signup' && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Confirm Password</label>
                   <div className="relative">
                     <i className="fa-solid fa-shield-halved absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                     <input
-                      type="password"
+                      type={showConfirmPassword ? 'text' : 'password'}
                       name="confirmPassword"
                       value={formData.confirmPassword}
                       onChange={handleInputChange}
                       placeholder="••••••••"
                       required
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-umak-orange focus:bg-white transition-colors"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-10 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-umak-orange focus:bg-white transition-colors"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      tabIndex={-1}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-umak-navy transition-colors cursor-pointer p-0.5"
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <i className={`fa-solid ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                    </button>
                   </div>
+                  {formData.confirmPassword.length > 0 && (
+                    <div className={`flex items-center gap-1.5 mt-1.5 text-[11px] font-semibold ${
+                      isConfirmMatch ? 'text-emerald-600' : 'text-red-500'
+                    }`}>
+                      <i className={`fa-solid ${isConfirmMatch ? 'fa-circle-check' : 'fa-circle-xmark'} text-[10px]`}></i>
+                      <span>{isConfirmMatch ? 'Passwords match' : 'Passwords do not match'}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-umak-navy to-umak-navydark hover:from-umak-orange hover:to-amber-600 text-white font-bold text-sm rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={loading || (authMode === 'signup' && !isSignupReady)}
+                className="w-full py-3 bg-gradient-to-r from-umak-navy to-umak-navydark hover:from-umak-orange hover:to-amber-600 text-white font-bold text-sm rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <>

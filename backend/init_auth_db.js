@@ -23,6 +23,10 @@ async function initAuthDB() {
         role VARCHAR(50) DEFAULT 'student',
         is_verified TINYINT(1) DEFAULT 0,
         verification_code VARCHAR(10) NULL,
+        failed_login_attempts INT DEFAULT 0,
+        locked_until DATETIME NULL,
+        unlock_requested TINYINT(1) DEFAULT 0,
+        unlock_requested_at DATETIME NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -33,6 +37,18 @@ async function initAuthDB() {
     } catch (e) {}
     try {
       await connection.query('ALTER TABLE users ADD COLUMN verification_code VARCHAR(10) NULL');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE users ADD COLUMN failed_login_attempts INT DEFAULT 0');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE users ADD COLUMN locked_until DATETIME NULL');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE users ADD COLUMN unlock_requested TINYINT(1) DEFAULT 0');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE users ADD COLUMN unlock_requested_at DATETIME NULL');
     } catch (e) {}
 
     console.log('✓ Users table created/updated with verification fields successfully.');
@@ -46,9 +62,14 @@ async function initAuthDB() {
         ['UMak Admin', 'admin@umak.edu.ph', hashedPassword, 'admin']
       );
       console.log('✓ Default Admin account created & verified: admin@umak.edu.ph / admin123');
-    } else {
       await connection.query('UPDATE users SET is_verified = 1 WHERE email = ?', ['admin@umak.edu.ph']);
     }
+
+    // Ensure vehicle_stickers table has payment_proof_doc column
+    try {
+      await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN payment_proof_doc VARCHAR(255) NULL');
+      console.log('✓ Added payment_proof_doc column to vehicle_stickers table.');
+    } catch (e) {}
 
     await connection.end();
     console.log('Auth Verification Database Setup Complete!');

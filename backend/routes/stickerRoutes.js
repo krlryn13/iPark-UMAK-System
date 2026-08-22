@@ -2,11 +2,13 @@ const express = require('express');
 const router = express.Router();
 const stickerController = require('../controllers/stickerController');
 const uploadSecurity = require('../middleware/uploadMiddleware');
+const { authenticateToken, requireRole } = require('../middleware/authMiddleware');
 
 const documentUpload = uploadSecurity.fields([
   { name: 'student_id_doc', maxCount: 1 },
   { name: 'or_cr_doc', maxCount: 1 },
-  { name: 'license_doc', maxCount: 1 }
+  { name: 'license_doc', maxCount: 1 },
+  { name: 'payment_proof_doc', maxCount: 1 }
 ]);
 
 // Wrapper to handle Multer security errors gracefully
@@ -22,9 +24,12 @@ const handleUploadMiddleware = (req, res, next) => {
   });
 };
 
-router.post('/apply', handleUploadMiddleware, stickerController.applySticker);
-router.get('/user/:userId', stickerController.getUserStickers);
-router.get('/admin/all', stickerController.getAllStickersAdmin);
-router.post('/admin/update', stickerController.updateStickerStatusAdmin);
+// Authenticated user
+router.post('/apply', authenticateToken, handleUploadMiddleware, stickerController.applySticker);
+router.get('/user/:userId', authenticateToken, stickerController.getUserStickers);
+
+// Admin only
+router.get('/admin/all', authenticateToken, requireRole('admin'), stickerController.getAllStickersAdmin);
+router.post('/admin/update', authenticateToken, requireRole('admin'), stickerController.updateStickerStatusAdmin);
 
 module.exports = router;

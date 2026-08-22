@@ -2,12 +2,35 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const userModel = require('../models/userModel');
 const { sendVerificationEmail } = require('../services/emailService');
+const { validatePassword } = require('../utils/passwordValidator');
+const { handleServerError } = require('../utils/errorHandler');
 
 const UMAK_DOMAIN = '@umak.edu.ph';
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_MINUTES = 15;
 
 // Helper to generate 6-digit verification code
 const generateVerificationCode = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// GET /api/auth/me — Validate token and return user data
+const getMe = (req, res) => {
+    userModel.findById(req.user.id, (err, results) => {
+        if (err) return handleServerError(res, err, 'Failed to fetch user profile.');
+        if (results.length === 0) return res.status(404).json({ error: 'User not found.' });
+
+        const user = results[0];
+        res.json({
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                is_verified: user.is_verified
+            }
+        });
+    });
 };
 
 // REGISTER USER
@@ -27,13 +50,18 @@ const register = (req, res) => {
         });
     }
 
-    if (password.length < 6) {
-        return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    // Enforce strong password policy
+    const passwordErrors = validatePassword(password);
+    if (passwordErrors.length > 0) {
+        return res.status(400).json({
+            error: 'Password does not meet security requirements.',
+            passwordErrors
+        });
     }
 
     // Check if email already registered
     userModel.findByEmail(cleanEmail, async (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) return handleServerError(res, err, 'Registration error. Please try again.');
         if (results.length > 0) {
             const existingUser = results[0];
             if (existingUser.is_verified === 1) {
@@ -42,7 +70,7 @@ const register = (req, res) => {
                 // User exists but not verified yet: resend new code
                 const newCode = generateVerificationCode();
                 userModel.updateVerificationCode(cleanEmail, newCode, async (updErr) => {
-                    if (updErr) return res.status(500).json({ error: updErr.message });
+                    if (updErr) return handleServerError(res, updErr, 'Failed to update verification code.');
                     try {
                         await sendVerificationEmail(cleanEmail, existingUser.name, newCode);
                     } catch (mailErr) {
@@ -70,7 +98,7 @@ const register = (req, res) => {
                 verification_code: vCode,
                 is_verified: 0
             }, async (err, result) => {
-                if (err) return res.status(500).json({ error: err.message });
+                if (err) return handleServerError(res, err, 'Account creation failed. Email address may already be registered.');
 
                 try {
                     await sendVerificationEmail(cleanEmail, name.trim(), vCode);
@@ -102,7 +130,7 @@ const verifyCode = (req, res) => {
     const cleanCode = code.trim();
 
     userModel.findByEmail(cleanEmail, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) return handleServerError(res, err, 'Verification error.');
         if (results.length === 0) {
             return res.status(404).json({ error: 'User account not found.' });
         }
@@ -119,12 +147,12 @@ const verifyCode = (req, res) => {
 
         // Code matches! Verify user
         userModel.verifyUserCode(cleanEmail, cleanCode, (verErr) => {
-            if (verErr) return res.status(500).json({ error: verErr.message });
+            if (verErr) return handleServerError(res, verErr, 'Account verification failed.');
 
             const userData = { id: user.id, name: user.name, email: user.email, role: user.role, is_verified: 1 };
             const token = jwt.sign(
                 { id: user.id, email: user.email, role: user.role },
-                process.env.JWT_SECRET || 'ipark_umak_secret_key',
+                process.env.JWT_SECRET,
                 { expiresIn: '24h' }
             );
 
@@ -146,13 +174,13 @@ const resendCode = (req, res) => {
     const newCode = generateVerificationCode();
 
     userModel.findByEmail(cleanEmail, async (findErr, results) => {
-        if (findErr) return res.status(500).json({ error: findErr.message });
+        if (findErr) return handleServerError(res, findErr, 'User lookup failed.');
         if (results.length === 0) return res.status(404).json({ error: 'User not found.' });
 
         const userName = results[0].name || 'Heron';
 
         userModel.updateVerificationCode(cleanEmail, newCode, async (err) => {
-            if (err) return res.status(500).json({ error: err.message });
+            if (err) return handleServerError(res, err, 'Code update failed.');
             try {
                 await sendVerificationEmail(cleanEmail, userName, newCode);
             } catch (mailErr) {
@@ -167,7 +195,7 @@ const resendCode = (req, res) => {
     });
 };
 
-// LOGIN USER
+// LOGIN USER (with account lockout protection)
 const login = (req, res) => {
     const { email, password } = req.body;
 
@@ -185,37 +213,78 @@ const login = (req, res) => {
     }
 
     userModel.findByEmail(cleanEmail, async (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) return handleServerError(res, err, 'Sign in error.');
         if (results.length === 0) {
             return res.status(401).json({ error: 'Account not found. Please Sign Up for a new Heron account.' });
         }
 
         const user = results[0];
 
+        // Check if account is locked
+        if (user.locked_until) {
+            const lockExpiry = new Date(user.locked_until);
+            if (lockExpiry > new Date()) {
+                const minutesLeft = Math.ceil((lockExpiry - new Date()) / 60000);
+                return res.status(423).json({
+                    error: `Account locked due to 5 failed login attempts. Automatically unlocks in ${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''}, or you can request OHSO Admin to unlock it now.`,
+                    isLocked: true,
+                    email: cleanEmail,
+                    unlockRequested: user.unlock_requested === 1
+                });
+            }
+            // Lock has expired — reset it
+            userModel.resetFailedAttempts(cleanEmail, () => {});
+        }
+
         try {
             const isMatch = await bcrypt.compare(password, user.password);
             if (!isMatch) {
-                return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+                // Increment failed attempts
+                const newAttempts = (user.failed_login_attempts || 0) + 1;
+
+                if (newAttempts >= MAX_FAILED_ATTEMPTS) {
+                    // Lock the account
+                    userModel.lockAccount(cleanEmail, LOCKOUT_MINUTES, () => {});
+                    return res.status(423).json({
+                        error: `Account locked for ${LOCKOUT_MINUTES} minutes due to ${MAX_FAILED_ATTEMPTS} consecutive failed login attempts. You can request OHSO Admin to unlock it.`,
+                        isLocked: true,
+                        email: cleanEmail,
+                        unlockRequested: false
+                    });
+                }
+
+                userModel.incrementFailedAttempts(cleanEmail, () => {});
+                const remaining = MAX_FAILED_ATTEMPTS - newAttempts;
+                return res.status(401).json({
+                    error: `Incorrect password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before account lockout.`
+                });
             }
+
+            // Successful login — reset failed attempts
+            userModel.resetFailedAttempts(cleanEmail, () => {});
 
             // Check if user is verified
             if (user.is_verified === 0) {
-                const newCode = user.verification_code || generateVerificationCode();
-                if (!user.verification_code) {
-                    userModel.updateVerificationCode(cleanEmail, newCode, () => {});
-                }
+                // Generate new code and send via email only — NEVER expose code in response
+                const newCode = generateVerificationCode();
+                userModel.updateVerificationCode(cleanEmail, newCode, async () => {
+                    try {
+                        await sendVerificationEmail(cleanEmail, user.name, newCode);
+                    } catch (mailErr) {
+                        console.error('[EMAIL ERROR]', mailErr.message);
+                    }
+                });
                 return res.status(403).json({ 
-                    error: 'Your account is not verified yet. Please enter the 6-digit verification code.',
+                    error: 'Your account is not verified yet. A new verification code has been sent to your email.',
                     requiresVerification: true,
-                    email: cleanEmail,
-                    verificationCode: newCode
+                    email: cleanEmail
                 });
             }
 
             const userData = { id: user.id, name: user.name, email: user.email, role: user.role, is_verified: 1 };
             const token = jwt.sign(
                 { id: user.id, email: user.email, role: user.role },
-                process.env.JWT_SECRET || 'ipark_umak_secret_key',
+                process.env.JWT_SECRET,
                 { expiresIn: '24h' }
             );
 
@@ -230,4 +299,73 @@ const login = (req, res) => {
     });
 };
 
-module.exports = { register, verifyCode, resendCode, login };
+// USER REQUEST UNLOCK
+const requestUnlock = (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    userModel.findByEmail(cleanEmail, (err, results) => {
+        if (err) return handleServerError(res, err, 'Unlock request error.');
+        if (results.length === 0) return res.status(404).json({ error: 'User account not found.' });
+
+        const user = results[0];
+        const isCurrentlyLocked = user.locked_until && new Date(user.locked_until) > new Date();
+
+        if (!isCurrentlyLocked) {
+            return res.status(400).json({ error: 'This account is not currently locked.' });
+        }
+
+        userModel.requestUnlock(cleanEmail, (updErr) => {
+            if (updErr) return handleServerError(res, updErr, 'Unlock request failed.');
+            res.json({
+                message: `Unlock request submitted successfully! OHSO Admin has been notified.`
+            });
+        });
+    });
+};
+
+// ADMIN GET ALL USERS
+const getAllUsersAdmin = (req, res) => {
+    userModel.getAllUsersAdmin((err, results) => {
+        if (err) return handleServerError(res, err, 'Failed to fetch user accounts.');
+        res.json(results);
+    });
+};
+
+// ADMIN UNLOCK USER
+const adminUnlockUser = (req, res) => {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'User ID is required.' });
+
+    userModel.findById(userId, (findErr, results) => {
+        if (findErr) return handleServerError(res, findErr, 'User lookup failed.');
+        if (results.length === 0) return res.status(404).json({ error: 'User not found.' });
+
+        const user = results[0];
+
+        userModel.adminUnlockUser(userId, async (updErr) => {
+            if (updErr) return handleServerError(res, updErr, 'Failed to unlock user account.');
+
+            // Send notification email asynchronously
+            const { sendAccountUnlockedEmail } = require('../services/emailService');
+            sendAccountUnlockedEmail(user.email, user.name).catch(console.error);
+
+            res.json({
+                message: `User account (${user.email}) unlocked successfully by OHSO Admin.`
+            });
+        });
+    });
+};
+
+module.exports = {
+    register,
+    verifyCode,
+    resendCode,
+    login,
+    getMe,
+    requestUnlock,
+    getAllUsersAdmin,
+    adminUnlockUser
+};

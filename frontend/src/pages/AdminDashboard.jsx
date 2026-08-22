@@ -8,35 +8,27 @@ import { useParkingData } from '../hooks/useParkingData';
 import { API_BASE_URL } from '../config/api';
 
 export const AdminDashboard = () => {
-  const { currentUser, logoutUser, loading: authLoading } = useAuth();
+  const { currentUser, logoutUser, loading: authLoading, authFetch } = useAuth();
   const navigate = useNavigate();
   const { lots } = useParkingData();
 
-  const [activeAdminTab, setActiveAdminTab] = useState('stickers'); // 'stickers' | 'guests' | 'parking'
+  const [activeAdminTab, setActiveAdminTab] = useState('stickers'); // 'stickers' | 'guests' | 'parking' | 'users'
   const [adminStickers, setAdminStickers] = useState([]);
   const [adminGuestReservations, setAdminGuestReservations] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
 
   // Selected application for document inspector modal
   const [inspectApplication, setInspectApplication] = useState(null);
 
-  // Redirect if not logged in or not admin
-  useEffect(() => {
-    if (!authLoading) {
-      if (!currentUser) {
-        navigate('/login', { replace: true });
-      } else if (currentUser.role !== 'admin') {
-        navigate('/dashboard', { replace: true });
-      }
-    }
-  }, [authLoading, currentUser, navigate]);
+
 
   // Fetch admin stickers
   const fetchAdminStickers = async () => {
     setLoadingData(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/stickers/admin/all`);
+      const res = await authFetch(`${API_BASE_URL}/api/stickers/admin/all`);
       if (res.ok) {
         const data = await res.json();
         setAdminStickers(data);
@@ -48,10 +40,21 @@ export const AdminDashboard = () => {
   // Fetch guest reservations
   const fetchAdminGuestReservations = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/guests/admin/all`);
+      const res = await authFetch(`${API_BASE_URL}/api/guests/admin/all`);
       if (res.ok) {
         const data = await res.json();
         setAdminGuestReservations(data);
+      }
+    } catch (e) {}
+  };
+
+  // Fetch admin users for Account Security tab
+  const fetchAdminUsers = async () => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/auth/admin/users`);
+      if (res.ok) {
+        const data = await res.json();
+        setAdminUsers(data);
       }
     } catch (e) {}
   };
@@ -60,15 +63,15 @@ export const AdminDashboard = () => {
     if (currentUser?.role === 'admin') {
       fetchAdminStickers();
       fetchAdminGuestReservations();
+      fetchAdminUsers();
     }
   }, [currentUser]);
 
   const handleGuestStatusUpdate = async (id, status) => {
     setActionMessage('');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/guests/admin/update-status`, {
+      const res = await authFetch(`${API_BASE_URL}/api/guests/admin/update-status`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status, admin_remarks: `OHSO Admin updated status to ${status}` })
       });
       if (res.ok) {
@@ -82,9 +85,8 @@ export const AdminDashboard = () => {
   const handleAdminStatusUpdate = async (id, status, vehicle_type) => {
     setActionMessage('');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/stickers/admin/update`, {
+      const res = await authFetch(`${API_BASE_URL}/api/stickers/admin/update`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status, vehicle_type, admin_remarks: `OHSO Admin processed status to ${status}.` })
       });
       const data = await res.json();
@@ -93,6 +95,26 @@ export const AdminDashboard = () => {
         fetchAdminStickers();
       }
     } catch (e) {}
+  };
+
+  // Admin Unlock User Action
+  const handleAdminUnlockUser = async (userId, userEmail) => {
+    setActionMessage('');
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/auth/admin/unlock-user`, {
+        method: 'POST',
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setActionMessage(`Account (${userEmail}) unlocked successfully! Notification email sent.`);
+        fetchAdminUsers();
+      } else {
+        setActionMessage(`Error: ${data.error || 'Failed to unlock user.'}`);
+      }
+    } catch (e) {
+      setActionMessage('Connection error. Could not unlock user.');
+    }
   };
 
   if (authLoading) {
@@ -246,7 +268,24 @@ export const AdminDashboard = () => {
             }`}
           >
             <i className="fa-solid fa-building text-umak-orange"></i>
-            <span>HPSB Parking Operations Overview</span>
+            <span>HPSB Operations Overview</span>
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('users')}
+            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 relative ${
+              activeAdminTab === 'users'
+                ? 'bg-umak-navy text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <i className="fa-solid fa-shield-halved text-red-400"></i>
+            <span>Account Security & Lockouts</span>
+            {adminUsers.filter(u => u.unlock_requested || (u.locked_until && new Date(u.locked_until) > new Date())).length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-red-500 text-white font-mono text-[10px] font-bold animate-pulse">
+                {adminUsers.filter(u => u.unlock_requested || (u.locked_until && new Date(u.locked_until) > new Date())).length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -509,6 +548,130 @@ export const AdminDashboard = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* ===== SECTION 4: ACCOUNT SECURITY & USER LOCKOUT MANAGEMENT ===== */}
+        {activeAdminTab === 'users' && (
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-4">
+              <div>
+                <h3 className="text-xl font-bold font-display text-slate-900">Account Security & User Lockout Management</h3>
+                <p className="text-xs text-slate-500 mt-0.5">View user security status, failed login attempts, and process account unlock requests.</p>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                  Total Accounts: {adminUsers.length}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-red-100 text-red-700 font-bold border border-red-200">
+                  Locked: {adminUsers.filter(u => u.locked_until && new Date(u.locked_until) > new Date()).length}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 font-bold border border-amber-200">
+                  Unlock Requested: {adminUsers.filter(u => u.unlock_requested === 1).length}
+                </span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 uppercase tracking-wider font-extrabold bg-slate-50/50">
+                    <th className="py-3 px-4">User Details</th>
+                    <th className="py-3 px-4">Role</th>
+                    <th className="py-3 px-4">Email Verified</th>
+                    <th className="py-3 px-4">Failed Attempts</th>
+                    <th className="py-3 px-4">Lockout / Security Status</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {adminUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                        No registered users found in database.
+                      </td>
+                    </tr>
+                  ) : (
+                    adminUsers.map(u => {
+                      const isLocked = u.locked_until && new Date(u.locked_until) > new Date();
+                      const minutesLeft = isLocked ? Math.ceil((new Date(u.locked_until) - new Date()) / 60000) : 0;
+                      const hasRequestedUnlock = u.unlock_requested === 1;
+
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900">{u.name}</div>
+                            <div className="text-[11px] text-slate-500 font-mono">{u.email}</div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2.5 py-0.5 rounded font-extrabold text-[10px] uppercase ${
+                              u.role === 'admin'
+                                ? 'bg-umak-navy text-white'
+                                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}>
+                              {u.role}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            {u.is_verified ? (
+                              <span className="text-emerald-600 font-bold inline-flex items-center gap-1">
+                                <i className="fa-solid fa-circle-check text-xs"></i> Verified
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-medium inline-flex items-center gap-1">
+                                <i className="fa-solid fa-clock text-xs"></i> Pending OTP
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <span className={`font-mono font-bold ${u.failed_login_attempts > 0 ? 'text-amber-600' : 'text-slate-500'}`}>
+                              {u.failed_login_attempts || 0} / 5
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            {isLocked ? (
+                              <div className="space-y-0.5">
+                                <span className="px-2.5 py-1 rounded-lg bg-red-100 text-red-700 border border-red-200 font-bold text-[10px] inline-flex items-center gap-1">
+                                  <i className="fa-solid fa-lock text-red-500"></i> Locked ({minutesLeft}m left)
+                                </span>
+                                {hasRequestedUnlock && (
+                                  <div className="text-[10px] text-amber-600 font-extrabold animate-pulse">
+                                    ⚡ Requested Unlock from Admin
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px] inline-flex items-center gap-1">
+                                <i className="fa-solid fa-shield-check text-emerald-500"></i> Active & Normal
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right">
+                            {isLocked || hasRequestedUnlock || u.failed_login_attempts > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => handleAdminUnlockUser(u.id, u.email)}
+                                className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer inline-flex items-center gap-1.5"
+                              >
+                                <i className="fa-solid fa-key"></i> Unlock Account
+                              </button>
+                            ) : (
+                              <span className="text-slate-300 text-xs font-medium">No Action Needed</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

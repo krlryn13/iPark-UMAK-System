@@ -13,7 +13,7 @@ import { useParkingData } from '../hooks/useParkingData';
 import { API_BASE_URL } from '../config/api';
 
 export const Dashboard = () => {
-  const { currentUser, logoutUser, loading: authLoading } = useAuth();
+  const { currentUser, logoutUser, loading: authLoading, authFetch } = useAuth();
   const navigate = useNavigate();
   const { lots } = useParkingData();
 
@@ -46,19 +46,14 @@ export const Dashboard = () => {
     setIsTutorialOpen(true);
   };
 
-  // Redirect to /login safely in useEffect if not logged in
-  useEffect(() => {
-    if (!authLoading && !currentUser) {
-      navigate('/login', { replace: true });
-    }
-  }, [authLoading, currentUser, navigate]);
+
 
   // Fetch user stickers (for regular users)
   const fetchUserStickers = async () => {
     if (!currentUser || isAdmin) return;
     setLoadingStickers(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/stickers/user/${currentUser.id}`);
+      const res = await authFetch(`${API_BASE_URL}/api/stickers/user/${currentUser.id}`);
       if (res.ok) {
         const data = await res.json();
         setUserStickers(data);
@@ -71,7 +66,7 @@ export const Dashboard = () => {
   const fetchAdminStickers = async () => {
     if (!isAdmin) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/stickers/admin/all`);
+      const res = await authFetch(`${API_BASE_URL}/api/stickers/admin/all`);
       if (res.ok) {
         const data = await res.json();
         setAdminStickers(data);
@@ -87,14 +82,19 @@ export const Dashboard = () => {
         fetchUserStickers();
       }
     }
+
+    // Auto-open sticker modal if returning from PayMongo redirect
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'success') {
+      setIsStickerModalOpen(true);
+    }
   }, [currentUser]);
 
   // Admin Approve / Reject Action
   const handleAdminStatusUpdate = async (id, status, vehicle_type) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/stickers/admin/update`, {
+      const res = await authFetch(`${API_BASE_URL}/api/stickers/admin/update`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status, vehicle_type, admin_remarks: `OHSO Admin processed status to ${status}.` })
       });
       if (res.ok) {
