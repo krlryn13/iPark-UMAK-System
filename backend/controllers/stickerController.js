@@ -1,4 +1,6 @@
 const stickerModel = require('../models/stickerModel');
+const emailService = require('../services/emailService');
+const db = require('../config/db');
 
 const generateRefNo = (method) => {
   const prefix = method ? method.toUpperCase() : 'PAY';
@@ -71,14 +73,28 @@ const applySticker = (req, res) => {
     license_doc
   };
 
-  stickerModel.createApplication(applicationData, (err, result) => {
+  // Check if user already has an active or pending application
+  stickerModel.getByUserId(user_id, (err, existing) => {
     if (err) return res.status(500).json({ error: err.message });
 
-    res.status(201).json({
-      message: 'Vehicle sticker payment & secure document upload successful! Pending OHSO approval.',
-      applicationId: result.insertId,
-      paymentRefNo: payment_ref_no,
-      amount: 200.00
+    const activeOrPending = (existing || []).find(s => s.status === 'pending' || s.status === 'approved' || s.status === 'issued');
+    if (activeOrPending) {
+      if (activeOrPending.status === 'pending') {
+        return res.status(400).json({ error: 'You already have a pending sticker application currently under OHSO admin review.' });
+      } else {
+        return res.status(400).json({ error: 'You already have an active/issued vehicle sticker for this account.' });
+      }
+    }
+
+    stickerModel.createApplication(applicationData, (createErr, result) => {
+      if (createErr) return res.status(500).json({ error: createErr.message });
+
+      res.status(201).json({
+        message: 'Vehicle sticker payment & secure document upload successful! Pending OHSO approval.',
+        applicationId: result.insertId,
+        paymentRefNo: payment_ref_no,
+        amount: 200.00
+      });
     });
   });
 };
@@ -112,6 +128,22 @@ const updateStickerStatusAdmin = (req, res) => {
 
   stickerModel.updateStatus(id, status, stickerNumber, admin_remarks || '', (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
+
+    // Fetch sticker application record to send email notification
+    db.query('SELECT * FROM vehicle_stickers WHERE id = ?', [id], (findErr, rows) => {
+      if (!findErr && rows && rows[0]) {
+        const stk = rows[0];
+        emailService.sendStickerStatusEmail(
+          stk.email,
+          stk.applicant_name,
+          status,
+          stickerNumber || stk.sticker_number,
+          stk.vehicle_type,
+          stk.plate_number
+        ).catch(console.error);
+      }
+    });
+
     res.json({
       message: `Sticker application ${status} successfully.`,
       stickerNumber

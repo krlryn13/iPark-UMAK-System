@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const InspectLotModal = ({ selectedLot, onClose }) => {
+export const InspectLotModal = ({ selectedLot, onClose, onOpenDirections }) => {
   if (!selectedLot) return null;
 
   return (
@@ -12,9 +12,23 @@ export const InspectLotModal = ({ selectedLot, onClose }) => {
               {selectedLot.code || `HPSB-L${selectedLot.id}`}
             </span>
             <h3 className="text-2xl font-bold font-display text-slate-900 mt-1">{selectedLot.name}</h3>
-            <p className="text-xs text-slate-500 flex items-center gap-1 mt-1 font-medium">
-              <i className="fa-solid fa-location-dot text-slate-400"></i> {selectedLot.location}
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs text-slate-500 flex items-center gap-1 font-medium">
+                <i className="fa-solid fa-location-dot text-amber-500"></i> {selectedLot.location}
+              </p>
+              {onOpenDirections && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenDirections(selectedLot);
+                  }}
+                  className="text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200 transition-colors cursor-pointer"
+                >
+                  How to Go ➔
+                </button>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -47,7 +61,7 @@ export const InspectLotModal = ({ selectedLot, onClose }) => {
           <p className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-2">
             <i className="fa-solid fa-table-cells text-umak-orange"></i> Live Parking Grid Simulation
           </p>
-          <div className="grid grid-cols-5 gap-2 max-h-56 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-h-60 overflow-y-auto touch-scroll p-2 bg-slate-50 rounded-xl border border-slate-200">
             {selectedLot.slotsList && selectedLot.slotsList.length > 0 ? (
               selectedLot.slotsList.map((slot) => {
                 const isOccupied = slot.status === 'occupied';

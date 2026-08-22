@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
+import { API_BASE_URL } from '../config/api';
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -81,8 +82,8 @@ export const LoginPage = () => {
 
     try {
       const endpoint = authMode === 'signup'
-        ? 'http://localhost:5000/api/auth/register'
-        : 'http://localhost:5000/api/auth/login';
+        ? `${API_BASE_URL}/api/auth/register`
+        : `${API_BASE_URL}/api/auth/login`;
 
       const bodyData = authMode === 'signup'
         ? { name: formData.name.trim(), email: cleanEmail, password: formData.password }
@@ -148,7 +149,7 @@ export const LoginPage = () => {
     setSuccess('');
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/verify', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: verifyEmail, code })
@@ -180,7 +181,7 @@ export const LoginPage = () => {
     setError('');
     setSuccess('');
     try {
-      const res = await fetch('http://localhost:5000/api/auth/resend-code', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/resend-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: verifyEmail })
@@ -202,7 +203,7 @@ export const LoginPage = () => {
       <Navbar />
 
       <main className="py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center my-auto">
-        <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-8 shadow-xl space-y-6 text-slate-800">
+        <div className="anim-fade-up in-view bg-white border border-slate-200 rounded-2xl max-w-md w-full p-8 shadow-xl space-y-6 text-slate-800">
 
           {/* Header */}
           <div className="text-center space-y-2 border-b border-slate-100 pb-5">

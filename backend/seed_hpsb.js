@@ -47,8 +47,22 @@ async function seedHPSB() {
     for (const level of levels) {
       for (let i = 1; i <= 15; i++) {
         const slotNumber = `${level.prefix}-${i < 10 ? '0' + i : i}`;
-        // Randomize initial status for realistic demo (mostly available, few occupied)
-        const isOccupied = (i === 2 || i === 5 || i === 11);
+        
+        let isOccupied = false;
+        if (level.lot_id === 1) {
+          // Level 1: Full (All 15 slots occupied)
+          isOccupied = true;
+        } else if (level.lot_id === 2) {
+          // Level 2: 10 occupied, 5 available
+          isOccupied = [1, 2, 4, 5, 7, 9, 10, 12, 14, 15].includes(i);
+        } else if (level.lot_id === 3) {
+          // Level 3: 5 occupied, 10 available
+          isOccupied = [2, 5, 8, 11, 14].includes(i);
+        } else if (level.lot_id === 4) {
+          // Level 4: 2 occupied, 13 available
+          isOccupied = [3, 10].includes(i);
+        }
+
         const status = isOccupied ? 'occupied' : 'available';
 
         await connection.query(

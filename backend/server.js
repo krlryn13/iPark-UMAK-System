@@ -6,6 +6,7 @@ const db = require('./config/db');
 const parkingRoutes = require('./routes/parkingRoutes');
 const authRoutes = require('./routes/authRoutes');
 const stickerRoutes = require('./routes/stickerRoutes');
+const guestRoutes = require('./routes/guestRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -24,6 +25,7 @@ app.get('/', (req, res) => {
 app.use('/api', parkingRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/stickers', stickerRoutes);
+app.use('/api/guests', guestRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

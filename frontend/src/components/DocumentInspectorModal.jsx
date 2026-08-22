@@ -1,4 +1,5 @@
 import React from 'react';
+import { API_BASE_URL } from '../config/api';
 
 export const DocumentInspectorModal = ({ isOpen, onClose, application }) => {
   if (!isOpen || !application) return null;
@@ -33,10 +34,10 @@ export const DocumentInspectorModal = ({ isOpen, onClose, application }) => {
         </div>
 
         {/* Documents Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 overflow-y-auto pr-1">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 overflow-y-auto touch-scroll max-h-[70vh] pr-1">
           {docs.map((doc, idx) => {
             const isPdf = doc.path && doc.path.toLowerCase().endsWith('.pdf');
-            const fullUrl = doc.path ? `http://localhost:5000${doc.path}` : null;
+            const fullUrl = doc.path ? `${API_BASE_URL}${doc.path}` : null;
 
             return (
               <div key={idx} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between space-y-3">

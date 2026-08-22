@@ -6,21 +6,105 @@ export const Navbar = () => {
   const { currentUser, logoutUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   const isDashboard = location.pathname === '/dashboard';
   const isAdminPage = location.pathname === '/admin';
   const isHome = location.pathname === '/';
   const isLogin = location.pathname === '/login';
 
-  const handleNavClick = (targetPath, e) => {
-    if (location.pathname === targetPath) {
-      e.preventDefault();
+  // ScrollSpy state for active section on landing page
+  const [activeSection, setActiveSection] = React.useState('home');
+
+  React.useEffect(() => {
+    if (!isHome) return;
+
+    const sections = ['home', 'sticker-guide', 'features', 'about', 'team'];
+
+    const updateActiveSection = () => {
+      // 1. If at top of page, activate 'home'
+      if (window.scrollY < 160) {
+        setActiveSection('home');
+        return;
+      }
+
+      // 2. Determine active section based on top position in document
+      const viewPoint = window.scrollY + 240; // View point offset below navbar
+      let active = 'home';
+
+      for (let i = 0; i < sections.length; i++) {
+        const id = sections[i];
+        const el = document.getElementById(id);
+        if (el) {
+          const top = el.getBoundingClientRect().top + window.scrollY;
+          if (viewPoint >= top) {
+            active = id;
+          }
+        }
+      }
+
+      setActiveSection(active);
+    };
+
+    let rAFId = null;
+    const handleScroll = () => {
+      if (rAFId) cancelAnimationFrame(rAFId);
+      rAFId = requestAnimationFrame(updateActiveSection);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
+    updateActiveSection();
+
+    return () => {
+      if (rAFId) cancelAnimationFrame(rAFId);
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [isHome]);
+
+  const navItems = [
+    { id: 'home', label: 'Home', icon: 'fa-house' },
+    { id: 'sticker-guide', label: 'Sticker Guide (₱200)', icon: 'fa-id-card' },
+    { id: 'features', label: 'Features', icon: 'fa-layer-group' },
+    { id: 'about', label: 'About & Objectives', icon: 'fa-circle-info' },
+    { id: 'team', label: 'Our Team', icon: 'fa-users-gear' },
+  ];
+
+  const handleSectionClick = (sectionId, e) => {
+    setMobileMenuOpen(false);
+    if (!isHome) {
+      navigate(`/#${sectionId}`);
+      return;
+    }
+    e.preventDefault();
+    if (sectionId === 'home') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      setActiveSection('home');
+      return;
+    }
+    const el = document.getElementById(sectionId);
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      const targetY = rect.top + window.scrollY - 140; // Generous 140px offset below navbar
+      window.scrollTo({ top: targetY >= 0 ? targetY : 0, behavior: 'smooth' });
+      setActiveSection(sectionId);
+    }
+  };
+
+  const handleNavClick = (targetPath, e) => {
+    setMobileMenuOpen(false);
+    if (location.pathname === targetPath || targetPath === '/') {
+      if (location.pathname === '/' && targetPath === '/') {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setActiveSection('home');
+      }
     }
   };
 
   return (
-    <>
+    <div className="sticky top-0 z-50 w-full shadow-sm">
       {/* TOP ANNOUNCEMENT BAR */}
       <div className="bg-umak-navydark text-xs py-2.5 px-4 text-slate-200 flex justify-between items-center shadow-inner">
         <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
@@ -32,7 +116,7 @@ export const Navbar = () => {
             <span className="hidden sm:inline text-slate-300 font-medium">University of Makati Campus Parking Operations</span>
           </div>
           <div className="flex items-center gap-4 text-slate-300">
-            <span className="flex items-center gap-1.5 font-medium">
+            <span className="flex items-center gap-1.5 font-medium text-[11px] sm:text-xs">
               <i className="fa-solid fa-building-columns text-umak-orange"></i> UMak Main Campus
             </span>
             <span className="hidden md:flex items-center gap-1.5 text-slate-400">
@@ -43,7 +127,7 @@ export const Navbar = () => {
       </div>
 
       {/* FLOATING LIGHT GLASS NAVBAR */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/90 border-b border-slate-200/80 shadow-sm">
+      <header className="backdrop-blur-xl bg-white/95 border-b border-slate-200/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
 
           {/* BRAND LOGO TEXT */}
@@ -62,13 +146,13 @@ export const Navbar = () => {
           </Link>
 
           {/* DESKTOP NAV LINKS */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600">
+          <nav className="hidden md:flex items-center gap-2 text-sm font-semibold text-slate-600">
             {currentUser ? (
               <>
                 <Link
                   to="/dashboard"
                   onClick={(e) => handleNavClick("/dashboard", e)}
-                  className={`transition-colors flex items-center gap-2 ${isDashboard ? 'text-umak-navy font-extrabold' : 'hover:text-umak-navy'}`}
+                  className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-2 ${isDashboard ? 'bg-umak-navy text-white font-extrabold shadow-sm' : 'hover:text-umak-navy hover:bg-slate-50'}`}
                 >
                   <i className="fa-solid fa-gauge text-xs text-umak-orange"></i> Live Operations Dashboard
                 </Link>
@@ -77,41 +161,40 @@ export const Navbar = () => {
                   <Link
                     to="/admin"
                     onClick={(e) => handleNavClick("/admin", e)}
-                    className={`transition-colors flex items-center gap-2 ${isAdminPage ? 'text-amber-600 font-extrabold' : 'hover:text-amber-600'}`}
+                    className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-2 ${isAdminPage ? 'bg-amber-500 text-white font-extrabold shadow-sm' : 'hover:text-amber-600 hover:bg-slate-50'}`}
                   >
-                    <i className="fa-solid fa-shield-halved text-xs text-amber-500"></i> OHSO Admin Portal
+                    <i className="fa-solid fa-shield-halved text-xs text-white"></i> OHSO Admin Portal
                   </Link>
                 )}
               </>
             ) : (
               <>
-                <Link
-                  to="/"
-                  onClick={(e) => handleNavClick("/", e)}
-                  className={`transition-colors flex items-center gap-2 ${isHome ? 'text-umak-navy font-extrabold' : 'hover:text-umak-navy'}`}
-                >
-                  <i className="fa-solid fa-house text-xs opacity-60 text-umak-orange"></i> Home
-                </Link>
-                <a href="/#sticker-guide" className="hover:text-umak-navy transition-colors flex items-center gap-2">
-                  <i className="fa-solid fa-id-card text-xs opacity-60 text-umak-orange"></i> Sticker Guide (₱200)
-                </a>
-                <a href="/#features" className="hover:text-umak-navy transition-colors flex items-center gap-2">
-                  <i className="fa-solid fa-layer-group text-xs opacity-60 text-umak-orange"></i> Features
-                </a>
-                <a href="/#about" className="hover:text-umak-navy transition-colors flex items-center gap-2">
-                  <i className="fa-solid fa-circle-info text-xs opacity-60 text-umak-orange"></i> About & Objectives
-                </a>
-                <a href="/#team" className="hover:text-umak-navy transition-colors flex items-center gap-2">
-                  <i className="fa-solid fa-users-gear text-xs opacity-60 text-umak-orange"></i> Our Team
-                </a>
+                {navItems.map((item) => {
+                  const isActive = isHome && activeSection === item.id;
+                  return (
+                    <a
+                      key={item.id}
+                      href={`/#${item.id}`}
+                      onClick={(e) => handleSectionClick(item.id, e)}
+                      className={`px-3.5 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer outline-none focus:outline-none focus:ring-0 ${
+                        isActive
+                          ? 'bg-umak-navy text-white font-extrabold shadow-sm'
+                          : 'text-slate-600 font-semibold hover:text-slate-900 hover:bg-slate-100/80'
+                      }`}
+                    >
+                      <i className={`fa-solid ${item.icon} text-xs ${isActive ? 'text-umak-orange' : 'text-umak-orange opacity-70'}`}></i>
+                      <span>{item.label}</span>
+                    </a>
+                  );
+                })}
               </>
             )}
           </nav>
 
-          {/* LOGIN / USER ACCOUNT CTA */}
-          <div className="flex items-center gap-3">
+          {/* LOGIN / USER ACCOUNT CTA + MOBILE HAMBURGER TOGGLE */}
+          <div className="flex items-center gap-2 sm:gap-3">
             {currentUser ? (
-              <div className="flex items-center gap-3 bg-slate-100 p-1.5 pl-3 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2 sm:gap-3 bg-slate-100 p-1 sm:p-1.5 sm:pl-3 rounded-xl border border-slate-200">
                 <div className="flex items-center gap-2 text-xs">
                   <div className="w-8 h-8 rounded-lg bg-umak-navy text-white font-bold flex items-center justify-center text-xs">
                     {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'H'}
@@ -124,7 +207,7 @@ export const Navbar = () => {
                 <button
                   onClick={() => { logoutUser(); navigate('/'); }}
                   title="Sign Out"
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-red-600 bg-white hover:bg-red-50 rounded-lg border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="px-2.5 sm:px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-red-600 bg-white hover:bg-red-50 rounded-lg border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer min-h-[36px]"
                 >
                   <i className="fa-solid fa-right-from-bracket"></i>
                   <span className="hidden sm:inline">Logout</span>
@@ -133,19 +216,76 @@ export const Navbar = () => {
             ) : (
               <button
                 onClick={() => navigate('/login')}
-                className={`relative inline-flex items-center justify-center px-5 py-2.5 text-sm font-bold text-white transition-all duration-200 rounded-xl shadow-md cursor-pointer ${
+                className={`relative inline-flex items-center justify-center px-3.5 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white transition-all duration-200 rounded-xl shadow-md cursor-pointer min-h-[40px] ${
                   isLogin
                     ? 'bg-umak-orange shadow-orange-500/25'
                     : 'bg-gradient-to-r from-umak-navy to-umak-navydark hover:from-umak-orange hover:to-amber-600'
                 }`}
               >
-                <i className="fa-solid fa-right-to-bracket mr-2"></i>
-                Portal Login
+                <i className="fa-solid fa-right-to-bracket mr-1.5 sm:mr-2"></i>
+                <span className="hidden xs:inline">Portal </span>Login
               </button>
             )}
+
+            {/* Mobile Hamburger Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle mobile menu"
+              className="md:hidden w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center text-base hover:bg-slate-200 transition-colors min-h-[40px]"
+            >
+              <i className={`fa-solid ${mobileMenuOpen ? 'fa-xmark' : 'fa-bars'}`}></i>
+            </button>
           </div>
         </div>
+
+        {/* MOBILE SLIDE-DOWN NAVIGATION OVERLAY */}
+        {mobileMenuOpen && (
+          <div className="md:hidden bg-white border-b border-slate-200 px-4 py-4 space-y-3 shadow-xl animate-in slide-in-from-top duration-200">
+            {currentUser ? (
+              <div className="space-y-2">
+                <Link
+                  to="/dashboard"
+                  onClick={(e) => handleNavClick("/dashboard", e)}
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 font-bold text-sm text-umak-navy border border-slate-100"
+                >
+                  <i className="fa-solid fa-gauge text-umak-orange"></i> Live Operations Dashboard
+                </Link>
+
+                {currentUser.role === 'admin' && (
+                  <Link
+                    to="/admin"
+                    onClick={(e) => handleNavClick("/admin", e)}
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-amber-50 font-bold text-sm text-amber-700 border border-amber-100"
+                  >
+                    <i className="fa-solid fa-shield-halved text-amber-500"></i> OHSO Admin Portal
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1.5 font-semibold text-xs text-slate-700">
+                {navItems.map((item) => {
+                  const isActive = isHome && activeSection === item.id;
+                  return (
+                    <a
+                      key={item.id}
+                      href={`/#${item.id}`}
+                      onClick={(e) => handleSectionClick(item.id, e)}
+                      className={`flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer outline-none focus:outline-none ${
+                        isActive
+                          ? 'bg-umak-navy text-white font-extrabold shadow-sm'
+                          : 'hover:bg-slate-50 border border-slate-100 text-slate-700 font-semibold'
+                      }`}
+                    >
+                      <i className={`fa-solid ${item.icon} text-umak-orange`}></i>
+                      <span>{item.label}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </header>
-    </>
+    </div>
   );
 };

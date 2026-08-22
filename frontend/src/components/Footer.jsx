@@ -54,9 +54,17 @@ export const Footer = () => {
               <p className="flex items-center gap-2">
                 <i className="fa-solid fa-building-columns text-umak-orange"></i> University of Makati (HPSB Building)
               </p>
-              <p className="flex items-center gap-2">
-                <i className="fa-solid fa-location-dot text-slate-500"></i> J.P. Rizal Ext, West Rembo, Taguig City
-              </p>
+              <a
+                href="https://www.google.com/maps/dir/?api=1&destination=14.56345,121.05612"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 hover:text-amber-400 transition-colors group cursor-pointer"
+                title="Get live driving/walking directions in Google Maps"
+              >
+                <i className="fa-solid fa-location-dot text-amber-500 group-hover:scale-110 transition-transform"></i>
+                <span>J.P. Rizal Ext, West Rembo, Taguig City</span>
+                <i className="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-70"></i>
+              </a>
               <p className="flex items-center gap-2">
                 <i className="fa-solid fa-envelope text-slate-500"></i> support@ipark.umak.edu.ph
               </p>

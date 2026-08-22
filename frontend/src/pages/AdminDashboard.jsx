@@ -5,14 +5,16 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { DocumentInspectorModal } from '../components/DocumentInspectorModal';
 import { useParkingData } from '../hooks/useParkingData';
+import { API_BASE_URL } from '../config/api';
 
 export const AdminDashboard = () => {
   const { currentUser, logoutUser, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { lots } = useParkingData();
 
-  const [activeAdminTab, setActiveAdminTab] = useState('stickers'); // 'stickers' | 'parking'
+  const [activeAdminTab, setActiveAdminTab] = useState('stickers'); // 'stickers' | 'guests' | 'parking'
   const [adminStickers, setAdminStickers] = useState([]);
+  const [adminGuestReservations, setAdminGuestReservations] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
 
@@ -34,7 +36,7 @@ export const AdminDashboard = () => {
   const fetchAdminStickers = async () => {
     setLoadingData(true);
     try {
-      const res = await fetch('http://localhost:5000/api/stickers/admin/all');
+      const res = await fetch(`${API_BASE_URL}/api/stickers/admin/all`);
       if (res.ok) {
         const data = await res.json();
         setAdminStickers(data);
@@ -43,17 +45,44 @@ export const AdminDashboard = () => {
     setLoadingData(false);
   };
 
+  // Fetch guest reservations
+  const fetchAdminGuestReservations = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/guests/admin/all`);
+      if (res.ok) {
+        const data = await res.json();
+        setAdminGuestReservations(data);
+      }
+    } catch (e) {}
+  };
+
   useEffect(() => {
     if (currentUser?.role === 'admin') {
       fetchAdminStickers();
+      fetchAdminGuestReservations();
     }
   }, [currentUser]);
+
+  const handleGuestStatusUpdate = async (id, status) => {
+    setActionMessage('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/guests/admin/update-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status, admin_remarks: `OHSO Admin updated status to ${status}` })
+      });
+      if (res.ok) {
+        setActionMessage(`Guest reservation #${id} status updated to "${status}".`);
+        fetchAdminGuestReservations();
+      }
+    } catch (e) {}
+  };
 
   // Admin Approve / Reject Action
   const handleAdminStatusUpdate = async (id, status, vehicle_type) => {
     setActionMessage('');
     try {
-      const res = await fetch('http://localhost:5000/api/stickers/admin/update', {
+      const res = await fetch(`${API_BASE_URL}/api/stickers/admin/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status, vehicle_type, admin_remarks: `OHSO Admin processed status to ${status}.` })
@@ -197,6 +226,18 @@ export const AdminDashboard = () => {
           </button>
 
           <button
+            onClick={() => setActiveAdminTab('guests')}
+            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              activeAdminTab === 'guests'
+                ? 'bg-umak-navy text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <i className="fa-solid fa-calendar-check text-emerald-400"></i>
+            <span>Guest & Event Reservations ({adminGuestReservations.filter(g => g.status === 'pending').length} Pending)</span>
+          </button>
+
+          <button
             onClick={() => setActiveAdminTab('parking')}
             className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
               activeAdminTab === 'parking'
@@ -226,7 +267,7 @@ export const AdminDashboard = () => {
               </button>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto touch-scroll">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-100 text-slate-600 font-bold uppercase border-b border-slate-200">
@@ -325,7 +366,110 @@ export const AdminDashboard = () => {
           </div>
         )}
 
-        {/* ===== SECTION 2: HPSB PARKING OPERATIONS OVERVIEW ===== */}
+        {/* ===== SECTION 2: GUEST & EVENT RESERVATIONS TABLE ===== */}
+        {activeAdminTab === 'guests' && (
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-xl font-bold font-display text-slate-900">Guest & Event Parking Pass Reservations</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Review visitor parking passes, event details, host contact persons, and plate numbers.</p>
+              </div>
+
+              <button
+                onClick={fetchAdminGuestReservations}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <i className="fa-solid fa-rotate-right"></i> Refresh Table
+              </button>
+            </div>
+
+            <div className="overflow-x-auto touch-scroll">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-600 font-bold uppercase border-b border-slate-200">
+                    <th className="p-3.5 rounded-l-xl">Pass Ref / Date</th>
+                    <th className="p-3.5">Event Name & Kind</th>
+                    <th className="p-3.5">Guest & Plate</th>
+                    <th className="p-3.5">Venue & Time</th>
+                    <th className="p-3.5">Host Point Person</th>
+                    <th className="p-3.5">Status</th>
+                    <th className="p-3.5 rounded-r-xl text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {adminGuestReservations.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="p-8 text-center text-slate-400">
+                        No guest parking reservations submitted yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    adminGuestReservations.map((gst) => (
+                      <tr key={gst.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-3.5">
+                          <span className="font-bold text-emerald-700 font-mono block text-xs">{gst.pass_code}</span>
+                          <span className="text-[11px] text-slate-400">{new Date(gst.event_date).toLocaleDateString()}</span>
+                        </td>
+                        <td className="p-3.5">
+                          <span className="font-bold text-slate-900 block">{gst.event_name}</span>
+                          <span className="text-[11px] text-slate-500 uppercase font-mono">{gst.event_kind} ({gst.requestee_role})</span>
+                        </td>
+                        <td className="p-3.5">
+                          <span className="font-bold text-slate-900 block">{gst.guest_name}</span>
+                          <span className="text-[11px] font-mono text-slate-600 font-bold uppercase">{gst.plate_number} • {gst.vehicle_details}</span>
+                        </td>
+                        <td className="p-3.5">
+                          <span className="font-bold text-slate-900 block">{gst.building_room}</span>
+                          <span className="text-[11px] text-slate-500">{gst.time_start} - {gst.time_end}</span>
+                        </td>
+                        <td className="p-3.5">
+                          <span className="font-bold text-slate-900 block">{gst.point_person_name}</span>
+                          <span className="text-[11px] font-mono text-slate-500">{gst.point_person_contact}</span>
+                        </td>
+                        <td className="p-3.5">
+                          <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] border capitalize ${
+                            gst.status === 'approved'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : gst.status === 'rejected'
+                                ? 'bg-red-50 text-red-700 border-red-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {gst.status}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right">
+                          {gst.status === 'pending' && (
+                            <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                              <button
+                                onClick={() => handleGuestStatusUpdate(gst.id, 'approved')}
+                                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                              >
+                                <i className="fa-solid fa-check text-xs"></i> Approve Pass
+                              </button>
+                              <button
+                                onClick={() => handleGuestStatusUpdate(gst.id, 'rejected')}
+                                className="px-3.5 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border border-red-200"
+                              >
+                                <i className="fa-solid fa-xmark text-xs"></i> Reject
+                              </button>
+                            </div>
+                          )}
+                          {gst.status === 'approved' && (
+                            <span className="text-xs text-emerald-600 font-bold inline-flex items-center gap-1">
+                              <i className="fa-solid fa-circle-check"></i> E-Pass Active
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ===== SECTION 3: HPSB PARKING OPERATIONS OVERVIEW ===== */}
         {activeAdminTab === 'parking' && (
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
             <div>

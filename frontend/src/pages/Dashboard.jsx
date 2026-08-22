@@ -7,7 +7,10 @@ import { ParkingLotCard } from '../components/ParkingLotCard';
 import { InspectLotModal } from '../components/InspectLotModal';
 import { StickerApplicationModal } from '../components/StickerApplicationModal';
 import { DocumentInspectorModal } from '../components/DocumentInspectorModal';
+import { GuestReservationModal } from '../components/GuestReservationModal';
+import LocationTutorialModal from '../components/LocationTutorialModal';
 import { useParkingData } from '../hooks/useParkingData';
+import { API_BASE_URL } from '../config/api';
 
 export const Dashboard = () => {
   const { currentUser, logoutUser, loading: authLoading } = useAuth();
@@ -26,12 +29,22 @@ export const Dashboard = () => {
 
   // Sticker Application Modal & User Stickers
   const [isStickerModalOpen, setIsStickerModalOpen] = useState(false);
+  const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [userStickers, setUserStickers] = useState([]);
   const [adminStickers, setAdminStickers] = useState([]);
   const [loadingStickers, setLoadingStickers] = useState(false);
 
   // Selected application for document inspector modal
   const [inspectApplication, setInspectApplication] = useState(null);
+
+  // Location tutorial state
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+  const [tutorialTarget, setTutorialTarget] = useState(null);
+
+  const handleOpenDirections = (target) => {
+    setTutorialTarget(target);
+    setIsTutorialOpen(true);
+  };
 
   // Redirect to /login safely in useEffect if not logged in
   useEffect(() => {
@@ -45,7 +58,7 @@ export const Dashboard = () => {
     if (!currentUser || isAdmin) return;
     setLoadingStickers(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/stickers/user/${currentUser.id}`);
+      const res = await fetch(`${API_BASE_URL}/api/stickers/user/${currentUser.id}`);
       if (res.ok) {
         const data = await res.json();
         setUserStickers(data);
@@ -58,7 +71,7 @@ export const Dashboard = () => {
   const fetchAdminStickers = async () => {
     if (!isAdmin) return;
     try {
-      const res = await fetch('http://localhost:5000/api/stickers/admin/all');
+      const res = await fetch(`${API_BASE_URL}/api/stickers/admin/all`);
       if (res.ok) {
         const data = await res.json();
         setAdminStickers(data);
@@ -79,7 +92,7 @@ export const Dashboard = () => {
   // Admin Approve / Reject Action
   const handleAdminStatusUpdate = async (id, status, vehicle_type) => {
     try {
-      const res = await fetch('http://localhost:5000/api/stickers/admin/update', {
+      const res = await fetch(`${API_BASE_URL}/api/stickers/admin/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status, vehicle_type, admin_remarks: `OHSO Admin processed status to ${status}.` })
@@ -124,6 +137,8 @@ export const Dashboard = () => {
   });
 
   const activeSticker = userStickers.find(s => s.status === 'issued' || s.status === 'approved');
+  const pendingSticker = userStickers.find(s => s.status === 'pending');
+  const hasRejectedOnly = userStickers.length > 0 && !activeSticker && !pendingSticker && userStickers.some(s => s.status === 'rejected');
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between selection:bg-amber-500 selection:text-white">
@@ -237,10 +252,10 @@ export const Dashboard = () => {
 
         {/* ===== TAB 1: LIVE PARKING MONITOR ===== */}
         {dashboardTab === 'monitor' && (
-          <div className="space-y-8">
+          <div className="space-y-8 tab-content-enter">
             {/* QUICK METRICS STATS BAR WITH PERFECT EQUAL CARD HEIGHTS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
-              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 hover:border-umak-navy/30 transition-all h-full">
+              <div className="anim-pop in-view anim-delay-0 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 hover:border-umak-navy/30 transition-all h-full">
                 <div className="w-12 h-12 rounded-xl bg-umak-navy/10 text-umak-navy flex items-center justify-center text-xl border border-umak-navy/20 flex-shrink-0">
                   <i className="fa-solid fa-building text-lg"></i>
                 </div>
@@ -250,7 +265,7 @@ export const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 hover:border-emerald-300 transition-all h-full">
+              <div className="anim-pop in-view anim-delay-100 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 hover:border-emerald-300 transition-all h-full">
                 <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl border border-emerald-200 flex-shrink-0">
                   <i className="fa-solid fa-circle-check"></i>
                 </div>
@@ -260,7 +275,7 @@ export const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 hover:border-red-300 transition-all h-full">
+              <div className="anim-pop in-view anim-delay-200 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 hover:border-red-300 transition-all h-full">
                 <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-xl border border-red-200 flex-shrink-0">
                   <i className="fa-solid fa-car"></i>
                 </div>
@@ -270,7 +285,7 @@ export const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 hover:border-orange-300 transition-all h-full">
+              <div className="anim-pop in-view anim-delay-300 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 hover:border-orange-300 transition-all h-full">
                 <div className="w-12 h-12 rounded-xl bg-orange-50 text-umak-orange flex items-center justify-center text-xl border border-orange-200 flex-shrink-0">
                   <i className="fa-solid fa-chart-pie"></i>
                 </div>
@@ -334,8 +349,18 @@ export const Dashboard = () => {
 
               {/* PARKING LOTS GRID WITH EQUAL HEIGHT CARDS */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
-                {filteredLots.map((lot) => (
-                  <ParkingLotCard key={lot.id} lot={lot} onInspect={(l) => setSelectedLot(l)} />
+                {filteredLots.map((lot, idx) => (
+                  <div
+                    key={lot.id}
+                    className="anim-fade-up in-view h-full"
+                    style={{ transitionDelay: `${idx * 80}ms` }}
+                  >
+                    <ParkingLotCard
+                      lot={lot}
+                      onInspect={(l) => setSelectedLot(l)}
+                      onOpenDirections={handleOpenDirections}
+                    />
+                  </div>
                 ))}
               </div>
             </section>
@@ -344,7 +369,7 @@ export const Dashboard = () => {
 
         {/* ===== TAB 2: MY VEHICLE STICKER (REGULAR USER ONLY) ===== */}
         {!isAdmin && dashboardTab === 'sticker' && (
-          <div className="space-y-8">
+          <div className="space-y-8 tab-content-enter">
             
             {/* Top Action Bar */}
             <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -356,12 +381,35 @@ export const Dashboard = () => {
                 </p>
               </div>
 
-              <button
-                onClick={() => setIsStickerModalOpen(true)}
-                className="px-6 py-3 bg-umak-orange hover:bg-umak-orangelight text-white font-bold text-sm rounded-xl shadow-lg shadow-orange-500/25 transition-all cursor-pointer flex items-center gap-2 min-h-[44px]"
-              >
-                <i className="fa-solid fa-plus-circle"></i> Apply for UMak Sticker (₱200.00)
-              </button>
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  onClick={() => setIsGuestModalOpen(true)}
+                  className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 min-h-[44px]"
+                >
+                  <i className="fa-solid fa-calendar-check"></i>
+                  <span>Guest / Visitor Parking Pass</span>
+                </button>
+
+                {activeSticker ? (
+                  <div className="px-5 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-xs flex items-center gap-2">
+                    <i className="fa-solid fa-circle-check text-emerald-600 text-base"></i>
+                    <span>Sticker Issued & Active</span>
+                  </div>
+                ) : pendingSticker ? (
+                  <div className="px-5 py-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 font-bold text-xs flex items-center gap-2">
+                    <i className="fa-solid fa-clock animate-pulse text-amber-600 text-base"></i>
+                    <span>Application Pending OHSO Review</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsStickerModalOpen(true)}
+                    className="px-6 py-3 bg-umak-orange hover:bg-umak-orangelight text-white font-bold text-sm rounded-xl shadow-lg shadow-orange-500/25 transition-all cursor-pointer flex items-center gap-2 min-h-[44px]"
+                  >
+                    <i className="fa-solid fa-plus-circle"></i>
+                    <span>{hasRejectedOnly ? 'Re-apply for UMak Sticker (₱200.00)' : 'Apply for UMak Sticker (₱200.00)'}</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Active Issued Sticker Digital Card */}
@@ -417,7 +465,7 @@ export const Dashboard = () => {
                   </button>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto touch-scroll">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-slate-100 text-slate-600 font-bold uppercase border-b border-slate-200">
@@ -582,7 +630,11 @@ export const Dashboard = () => {
       <Footer />
 
       {/* INSPECT LOT MODAL */}
-      <InspectLotModal selectedLot={selectedLot} onClose={() => setSelectedLot(null)} />
+      <InspectLotModal
+        selectedLot={selectedLot}
+        onClose={() => setSelectedLot(null)}
+        onOpenDirections={handleOpenDirections}
+      />
 
       {/* STICKER APPLICATION MODAL (REGULAR USER ONLY) */}
       {!isAdmin && (
@@ -598,6 +650,20 @@ export const Dashboard = () => {
         isOpen={Boolean(inspectApplication)}
         onClose={() => setInspectApplication(null)}
         application={inspectApplication}
+      />
+
+      {/* GUEST RESERVATION MODAL */}
+      <GuestReservationModal
+        isOpen={isGuestModalOpen}
+        onClose={() => setIsGuestModalOpen(false)}
+        initialEmail={currentUser?.email || ''}
+      />
+
+      {/* LOCATION TUTORIAL MODAL */}
+      <LocationTutorialModal
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+        locationTarget={tutorialTarget}
       />
     </div>
   );

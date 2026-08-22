@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL } from '../config/api';
+import LocationTutorialModal from './LocationTutorialModal';
 
 export const StickerApplicationModal = ({ isOpen, onClose, onSuccess }) => {
   const { currentUser } = useAuth();
 
   const [step, setStep] = useState(1); // 1: Form & Security Uploads, 2: Payment, 3: Receipt
   const [paymentMethod, setPaymentMethod] = useState('gcash');
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     student_id_num: '',
@@ -138,7 +141,7 @@ export const StickerApplicationModal = ({ isOpen, onClose, onSuccess }) => {
       if (files.or_cr_doc) submitData.append('or_cr_doc', files.or_cr_doc);
       if (files.license_doc) submitData.append('license_doc', files.license_doc);
 
-      const res = await fetch('http://localhost:5000/api/stickers/apply', {
+      const res = await fetch(`${API_BASE_URL}/api/stickers/apply`, {
         method: 'POST',
         body: submitData
       });
@@ -213,7 +216,7 @@ export const StickerApplicationModal = ({ isOpen, onClose, onSuccess }) => {
 
         {/* ===== STEP 1: VEHICLE & SECURE DOCUMENT UPLOADS ===== */}
         {step === 1 && (
-          <form onSubmit={handleProceedToPayment} className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+          <form onSubmit={handleProceedToPayment} className="space-y-4 max-h-[75vh] sm:max-h-[70vh] overflow-y-auto touch-scroll pr-1">
 
             {/* Student ID */}
             <div>
@@ -632,15 +635,29 @@ export const StickerApplicationModal = ({ isOpen, onClose, onSuccess }) => {
 
             {/* Pickup Instructions */}
             <div className="bg-umak-navy/5 border border-umak-navy/15 rounded-2xl p-4 text-xs space-y-2">
-              <h5 className="font-bold text-umak-navy flex items-center gap-1.5">
-                <i className="fa-solid fa-location-dot text-umak-orange"></i> Physical Sticker Pickup Instructions
-              </h5>
+              <div className="flex items-center justify-between">
+                <h5 className="font-bold text-umak-navy flex items-center gap-1.5">
+                  <i className="fa-solid fa-location-dot text-umak-orange"></i> Physical Sticker Pickup Instructions
+                </h5>
+                <button
+                  type="button"
+                  onClick={() => setIsTutorialOpen(true)}
+                  className="text-[10px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-full transition-colors cursor-pointer"
+                >
+                  How to Go ➔
+                </button>
+              </div>
               <p className="text-slate-600 leading-relaxed">
                 Your online payment eliminates the Cash Office physical queue! Once approved by OHSO Admin, present this Ref No. (<strong>{receiptData.refNo}</strong>) or your Student ID at:
               </p>
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200 font-semibold text-slate-800">
-                Occupational Health & Safety Office (OHSO) — Basement, Admin Building
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsTutorialOpen(true)}
+                className="w-full text-left bg-white hover:bg-amber-50 p-2.5 rounded-xl border border-slate-200 font-semibold text-slate-800 flex items-center justify-between group transition-colors cursor-pointer"
+              >
+                <span>Occupational Health & Safety Office (OHSO) — Ground Floor, Admin Building</span>
+                <i className="fa-solid fa-map-location-dot text-amber-500 group-hover:scale-110 transition-transform"></i>
+              </button>
             </div>
 
             <button
@@ -649,6 +666,13 @@ export const StickerApplicationModal = ({ isOpen, onClose, onSuccess }) => {
             >
               Done & Return to Dashboard
             </button>
+
+            {/* LOCATION TUTORIAL MODAL */}
+            <LocationTutorialModal
+              isOpen={isTutorialOpen}
+              onClose={() => setIsTutorialOpen(false)}
+              locationTarget="ohso-office"
+            />
           </div>
         )}
 

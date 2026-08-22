@@ -17,8 +17,10 @@ const transporter = nodemailer.createTransport({
 const sendVerificationEmail = async (toEmail, name, code) => {
   const mailOptions = {
     from: `"iPark UMAK" <${process.env.EMAIL_USER}>`,
+    replyTo: process.env.EMAIL_USER,
     to: toEmail,
     subject: 'iPark UMAK — Account Verification Code',
+    text: `Hi ${name},\n\nYour iPark UMAK one-time verification code is: ${code}\n\nThis code expires in 15 minutes.\n\nThank you,\nUniversity of Makati - iPark UMAK System`,
     html: `
 <!DOCTYPE html>
 <html lang="en">
@@ -234,4 +236,285 @@ const sendVerificationEmail = async (toEmail, name, code) => {
   console.log(`[EMAIL SENT] Verification code ${code} sent to ${toEmail}`);
 };
 
-module.exports = { sendVerificationEmail };
+/**
+ * Helper to format raw date (Date object or string) into clean readable date (e.g. "Wed, Aug 19, 2026")
+ * MySQL returns DATE columns as JavaScript Date objects, so we must handle both.
+ */
+const formatDateClean = (rawDate) => {
+  if (!rawDate) return '';
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  // If it's already a Date object (MySQL driver returns Date for DATE columns)
+  if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
+    return `${daysOfWeek[rawDate.getDay()]}, ${monthNames[rawDate.getMonth()]} ${rawDate.getDate()}, ${rawDate.getFullYear()}`;
+  }
+
+  // Try parsing as "YYYY-MM-DD" string
+  const dateStr = String(rawDate).split('T')[0];
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const year = parseInt(parts[0], 10);
+    const monthIdx = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const d = new Date(year, monthIdx, day);
+    if (!isNaN(d.getTime())) {
+      return `${daysOfWeek[d.getDay()]}, ${monthNames[monthIdx]} ${day}, ${year}`;
+    }
+  }
+  return String(rawDate);
+};
+
+/**
+ * Sends a confirmation email to the guest/visitor with their UMak Parking E-Pass.
+ */
+const sendGuestPassEmail = async (toEmail, guestName, passCode, eventName, eventDate, timeStart, timeEnd, venue, plateNumber, preferredLevel = 'HPSB Level 2') => {
+  try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.log(`[EMAIL NOTICE] SMTP credentials not configured in .env. Pass ${passCode} logged for ${toEmail}.`);
+      return;
+    }
+
+    const formattedDate = formatDateClean(eventDate);
+    const parkingFloor = preferredLevel || 'HPSB Level 2';
+
+    const mailOptions = {
+      from: `"iPark UMAK - OHSO" <${process.env.EMAIL_USER}>`,
+      replyTo: process.env.EMAIL_USER,
+      to: toEmail,
+      subject: `UMak Visitor Parking E-Pass Confirmation — ${passCode}`,
+      text: `Hello ${guestName},\n\nYour UMak visitor parking reservation for ${eventName} on ${formattedDate} (${timeStart} - ${timeEnd}) has been received.\n\nPass Reference Code: ${passCode}\nAssigned Floor: ${parkingFloor}\nVenue: ${venue}\nPlate Number: ${plateNumber}\n\nPlease present this code or email to the OHSO Security Officer at HPSB Gate upon arrival.\n\nThank you,\nOccupational Health and Safety Office (OHSO) - University of Makati`,
+      html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>UMak Visitor Parking E-Pass</title>
+</head>
+<body style="margin:0;padding:0;background-color:#EEF2F7;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #DDE3EE;">
+          <tr>
+            <td style="background:#0A1F5C;padding:24px 32px;color:#ffffff;">
+              <span style="font-size:20px;font-weight:900;">iPark <span style="color:#F5821F;">UMAK</span></span>
+              <p style="margin:4px 0 0;font-size:11px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1px;">OHSO Official Visitor Parking Confirmation</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 10px;font-size:20px;color:#0A1F5C;">Parking Reservation Received</h2>
+              <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;">
+                Hello <strong>${guestName}</strong>, your visitor parking reservation for <strong>${eventName}</strong> has been received and registered with campus security.
+              </p>
+              
+              <div style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:14px;padding:20px;margin-bottom:24px;">
+                <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:1px;">Your Pass Reference Code</p>
+                <p style="margin:0;font-size:24px;font-weight:900;color:#15803D;font-family:monospace;">${passCode}</p>
+              </div>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#334155;line-height:1.8;margin-bottom:20px;">
+                <tr><td width="38%" style="color:#64748B;">Date:</td><td><strong>${formattedDate}</strong></td></tr>
+                <tr><td style="color:#64748B;">Schedule:</td><td><strong>${timeStart} to ${timeEnd}</strong></td></tr>
+                <tr><td style="color:#64748B;">Assigned Floor:</td><td><strong style="color:#15803D;">${parkingFloor}</strong></td></tr>
+                <tr><td style="color:#64748B;">Venue:</td><td><strong>${venue}</strong></td></tr>
+                <tr><td style="color:#64748B;">Plate Number:</td><td><strong style="text-transform:uppercase;font-family:monospace;">${plateNumber}</strong></td></tr>
+              </table>
+
+              <p style="margin:0;font-size:12px;color:#64748B;line-height:1.5;border-top:1px solid #E2E8F0;padding-top:16px;">
+                <strong>Notice:</strong> Please present this email or your Pass Reference Code (<strong>${passCode}</strong>) to the OHSO Security Officer at HPSB Gate upon arrival.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`[GUEST EMAIL SENT] Confirmation pass ${passCode} sent to ${toEmail}`);
+  } catch (err) {
+    console.error(`[GUEST EMAIL ERROR] Failed to send email to ${toEmail}:`, err.message);
+  }
+};
+
+/**
+ * Sends notification email when OHSO Admin approves or rejects a Vehicle Sticker Application.
+ */
+const sendStickerStatusEmail = async (toEmail, applicantName, status, stickerNumber, vehicleType, plateNumber) => {
+  try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
+
+    const isApproved = status === 'approved' || status === 'issued';
+    const subject = isApproved
+      ? `UMak Vehicle Sticker APPROVED — ${stickerNumber || 'Official Sticker'}`
+      : `UMak Vehicle Sticker Application Status: ${status.toUpperCase()}`;
+
+    const mailOptions = {
+      from: `"iPark UMAK - OHSO" <${process.env.EMAIL_USER}>`,
+      replyTo: process.env.EMAIL_USER,
+      to: toEmail,
+      subject,
+      text: isApproved
+        ? `Hello ${applicantName},\n\nGreat news! Your UMak Vehicle Sticker application for ${plateNumber} (${vehicleType}) has been APPROVED by OHSO Admin.\n\nSticker Number: ${stickerNumber}\nStatus: ${status.toUpperCase()}\n\nPlease present your E-Receipt or Student/Faculty ID at the OHSO Office (Basement, Admin Building) to collect your physical sticker.\n\nThank you,\nUniversity of Makati - OHSO`
+        : `Hello ${applicantName},\n\nYour UMak Vehicle Sticker application for ${plateNumber} status has been updated to: ${status.toUpperCase()}.\n\nThank you,\nUniversity of Makati - OHSO`,
+      html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Sticker Status</title></head>
+<body style="margin:0;padding:0;background-color:#EEF2F7;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #DDE3EE;">
+          <tr>
+            <td style="background:#0A1F5C;padding:24px 32px;color:#ffffff;">
+              <span style="font-size:20px;font-weight:900;">iPark <span style="color:#F5821F;">UMAK</span></span>
+              <p style="margin:4px 0 0;font-size:11px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1px;">OHSO Vehicle Sticker Verification Notice</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 10px;font-size:20px;color:${isApproved ? '#15803D' : '#B91C1C'};">
+                Application ${isApproved ? 'APPROVED' : status.toUpperCase()}
+              </h2>
+              <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;">
+                Hello <strong>${applicantName}</strong>, your campus vehicle sticker application for <strong>${plateNumber}</strong> (${vehicleType}) has been processed by OHSO Admin.
+              </p>
+              
+              ${isApproved ? `
+              <div style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:14px;padding:20px;margin-bottom:24px;">
+                <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:1px;">Assigned Sticker Number</p>
+                <p style="margin:0;font-size:24px;font-weight:900;color:#15803D;font-family:monospace;">${stickerNumber}</p>
+              </div>
+              <p style="margin:0 0 16px;font-size:13px;color:#334155;line-height:1.6;">
+                <strong>Pickup Location:</strong> Occupational Health & Safety Office (OHSO) — Basement of Admin Building.
+              </p>
+              ` : `
+              <div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:14px;padding:20px;margin-bottom:24px;">
+                <p style="margin:0;font-size:14px;font-weight:700;color:#991B1B;">Status: ${status.toUpperCase()}</p>
+              </div>
+              `}
+
+              <p style="margin:0;font-size:12px;color:#64748B;line-height:1.5;border-top:1px solid #E2E8F0;padding-top:16px;">
+                Thank you for supporting UMak smart campus mobility!
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`[STICKER EMAIL SENT] Status ${status} sent to ${toEmail}`);
+  } catch (err) {
+    console.error(`[STICKER EMAIL ERROR] Failed to send email to ${toEmail}:`, err.message);
+  }
+};
+
+/**
+ * Sends notification email when OHSO Admin approves or rejects a Guest Parking Reservation.
+ */
+const sendGuestPassStatusEmail = async (toEmail, guestName, status, passCode, eventName, eventDate, timeStart, timeEnd, venue, plateNumber, vehicleDetails) => {
+  try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
+
+    const isApproved = status === 'approved';
+    const formattedDate = formatDateClean(eventDate);
+    
+    // Extract parking floor level if present in vehicleDetails, or default to HPSB Level 2
+    let floorText = 'HPSB Level 2';
+    if (vehicleDetails && vehicleDetails.includes('[Floor:')) {
+      const match = vehicleDetails.match(/\[Floor:\s*([^\]]+)\]/);
+      if (match && match[1]) {
+        floorText = match[1].trim();
+      }
+    }
+
+    const subject = isApproved
+      ? `UMak Visitor Parking Pass APPROVED — ${passCode}`
+      : `UMak Visitor Parking Pass Status: ${status.toUpperCase()}`;
+
+    const mailOptions = {
+      from: `"iPark UMAK - OHSO" <${process.env.EMAIL_USER}>`,
+      replyTo: process.env.EMAIL_USER,
+      to: toEmail,
+      subject,
+      text: isApproved
+        ? `Hello ${guestName},\n\nYour UMak visitor parking pass (${passCode}) for ${eventName} on ${formattedDate} has been APPROVED by OHSO Admin & Security.\n\nAssigned Floor: ${floorText}\nSchedule: ${timeStart || '08:00'} - ${timeEnd || '17:00'}\nVenue: ${venue || 'HPSB Building'}\nPlate Number: ${plateNumber || 'Registered Vehicle'}\n\nPlease present this email or your Pass Code (${passCode}) at HPSB Gate upon arrival.\n\nThank you,\nOccupational Health and Safety Office (OHSO) - University of Makati`
+        : `Hello ${guestName},\n\nYour visitor parking reservation (${passCode}) status has been updated to: ${status.toUpperCase()}.\n\nThank you,\nUniversity of Makati - OHSO`,
+      html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Guest Pass Status</title></head>
+<body style="margin:0;padding:0;background-color:#EEF2F7;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #DDE3EE;">
+          <tr>
+            <td style="background:#0A1F5C;padding:24px 32px;color:#ffffff;">
+              <span style="font-size:20px;font-weight:900;">iPark <span style="color:#F5821F;">UMAK</span></span>
+              <p style="margin:4px 0 0;font-size:11px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1px;">OHSO Visitor Pass Verification</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 10px;font-size:20px;color:${isApproved ? '#15803D' : '#B91C1C'};">
+                Visitor Pass ${isApproved ? 'APPROVED' : status.toUpperCase()}
+              </h2>
+              <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;">
+                Hello <strong>${guestName}</strong>, your visitor parking pass for <strong>${eventName}</strong> on <strong>${formattedDate}</strong> has been <strong>${status.toUpperCase()}</strong> by OHSO Security Administration.
+              </p>
+              
+              <div style="background:${isApproved ? '#F0FDF4' : '#FEF2F2'};border:1.5px solid ${isApproved ? '#BBF7D0' : '#FCA5A5'};border-radius:14px;padding:20px;margin-bottom:24px;">
+                <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:${isApproved ? '#166534' : '#991B1B'};text-transform:uppercase;letter-spacing:1px;">Pass Reference Code</p>
+                <p style="margin:0;font-size:24px;font-weight:900;color:${isApproved ? '#15803D' : '#991B1B'};font-family:monospace;">${passCode}</p>
+              </div>
+
+              ${isApproved ? `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#334155;line-height:1.8;margin-bottom:20px;">
+                <tr><td width="38%" style="color:#64748B;">Date & Schedule:</td><td><strong>${formattedDate} (${timeStart || '08:00'} - ${timeEnd || '17:00'})</strong></td></tr>
+                <tr><td style="color:#64748B;">Assigned Floor:</td><td><strong style="color:#15803D;">${floorText}</strong></td></tr>
+                ${venue ? `<tr><td style="color:#64748B;">Venue:</td><td><strong>${venue}</strong></td></tr>` : ''}
+                ${plateNumber ? `<tr><td style="color:#64748B;">Plate Number:</td><td><strong style="text-transform:uppercase;font-family:monospace;">${plateNumber}</strong></td></tr>` : ''}
+              </table>
+              ` : ''}
+
+              <p style="margin:0;font-size:12px;color:#64748B;line-height:1.5;border-top:1px solid #E2E8F0;padding-top:16px;">
+                Present this code to the OHSO Security Officer at HPSB Gate upon arrival.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`[GUEST STATUS EMAIL SENT] Pass ${passCode} status ${status} sent to ${toEmail}`);
+  } catch (err) {
+    console.error(`[GUEST STATUS EMAIL ERROR] Failed to send email to ${toEmail}:`, err.message);
+  }
+};
+
+module.exports = {
+  sendVerificationEmail,
+  sendGuestPassEmail,
+  sendStickerStatusEmail,
+  sendGuestPassStatusEmail
+};

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const ParkingLotCard = ({ lot, onInspect }) => {
+export const ParkingLotCard = ({ lot, onInspect, onOpenDirections }) => {
   const available = lot.availableSlots !== undefined ? lot.availableSlots : (lot.totalSlots - lot.occupiedSlots);
   const occupied = lot.occupiedSlots || 0;
   const percentage = Math.round((occupied / lot.totalSlots) * 100);
@@ -18,9 +18,23 @@ export const ParkingLotCard = ({ lot, onInspect }) => {
             <h3 className="text-xl font-bold font-display text-slate-900 mt-2.5 group-hover:text-umak-orange transition-colors">
               {lot.name}
             </h3>
-            <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5 mt-1">
-              <i className="fa-solid fa-location-dot text-slate-400"></i> {lot.location}
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenDirections) onOpenDirections(lot);
+                }}
+                className="text-xs text-slate-600 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 font-medium flex items-center gap-1.5 group/loc bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+                title="View animated directions tutorial on how to get here"
+              >
+                <i className="fa-solid fa-location-dot text-amber-500 group-hover/loc:scale-125 transition-transform"></i>
+                <span>{lot.location}</span>
+                <span className="text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 px-1.5 py-0.2 rounded group-hover/loc:bg-amber-500 group-hover/loc:text-white transition-colors ml-1">
+                  How to Go ➔
+                </span>
+              </button>
+            </div>
           </div>
 
           <span className={`px-3 py-1 text-xs font-bold rounded-full border flex-shrink-0 ${isFull
