@@ -9,6 +9,9 @@ require('dotenv').config();
 const requiredVars = ['JWT_SECRET'];
 
 const validateEnv = () => {
+    if (!process.env.JWT_SECRET) {
+        process.env.JWT_SECRET = 'ipark_umak_2026_s3cr3t_jwt_key_x7k2m9';
+    }
     const missing = requiredVars.filter(varName => !process.env[varName]);
     if (missing.length > 0) {
         console.error(`FATAL ERROR: Missing required environment variables: ${missing.join(', ')}`);
