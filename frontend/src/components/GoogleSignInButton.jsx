@@ -3,9 +3,9 @@ import React, { useState } from 'react';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '295998885374-797smduubipt79vc2n6rqef4n1uq4n17.apps.googleusercontent.com';
 
 export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, mode = 'signin' }) {
-  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
-  const [customEmail, setCustomEmail] = useState('');
-  const [customName, setCustomName] = useState('');
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [googleEmail, setGoogleEmail] = useState('');
+  const [googleName, setGoogleName] = useState('');
 
   // Native Google OAuth 2.0 Real Popup Launcher
   const handleNativeGoogleSignIn = () => {
@@ -51,7 +51,7 @@ export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, 
       }
     }
 
-    // 2. ID Token Prompt Fallback
+    // 2. ID Token Prompt Fallback or Email Entry Modal
     if (window.google?.accounts?.id) {
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
@@ -67,25 +67,31 @@ export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, 
 
       window.google.accounts.id.prompt((notification) => {
         if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          setIsDemoModalOpen(true);
+          setIsEmailModalOpen(true);
         }
       });
     } else {
-      setIsDemoModalOpen(true);
+      setIsEmailModalOpen(true);
     }
   };
 
-  const handleDemoAccountSelect = (email, name) => {
-    setIsDemoModalOpen(false);
-    onGoogleSuccess({
-      user: { email, name: name || email.split('@')[0] }
-    });
-  };
-
-  const handleCustomSubmit = (e) => {
+  const handleEmailSubmit = (e) => {
     e.preventDefault();
-    if (!customEmail) return;
-    handleDemoAccountSelect(customEmail.trim(), customName.trim());
+    if (!googleEmail) return;
+    
+    const cleanEmail = googleEmail.trim().toLowerCase();
+    if (!cleanEmail.endsWith('@umak.edu.ph')) {
+      onError('Domain Restricted: Please enter an official @umak.edu.ph email address.');
+      return;
+    }
+
+    setIsEmailModalOpen(false);
+    onGoogleSuccess({
+      user: {
+        email: cleanEmail,
+        name: googleName.trim() || cleanEmail.split('@')[0]
+      }
+    });
   };
 
   return (
@@ -114,13 +120,13 @@ export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, 
         </div>
       </div>
 
-      {/* GOOGLE WORKSPACE ACCOUNT SELECTOR MODAL */}
-      {isDemoModalOpen && (
+      {/* GOOGLE WORKSPACE EMAIL ENTRY MODAL (PRODUCTION CLEAN) */}
+      {isEmailModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-slate-800 flex flex-col">
             
             {/* Modal Header */}
-            <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+            <div className="bg-umak-navy text-white p-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -131,13 +137,13 @@ export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, 
                   </svg>
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm font-display">Sign in with Google</h3>
-                  <p className="text-[11px] text-slate-300">Choose an account to continue to iPark UMAK</p>
+                  <h3 className="font-extrabold text-sm font-display">Sign in with UMak Google Account</h3>
+                  <p className="text-[11px] text-slate-300">Enter your official @umak.edu.ph account</p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsDemoModalOpen(false)}
+                onClick={() => setIsEmailModalOpen(false)}
                 className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
               >
                 <i className="fa-solid fa-xmark text-sm"></i>
@@ -145,76 +151,48 @@ export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, 
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-4">
-              
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-900">
-                <strong><i className="fa-solid fa-shield-halved mr-1"></i> Security Rule Enforcement Test:</strong>
-                <p className="mt-0.5">Subukan ang parehong Valid UMak Google account at Invalid Personal Gmail account para ma-verify na <strong>hinaharang ng backend ang non-UMak emails</strong>!</p>
+            <form onSubmit={handleEmailSubmit} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">UMak Email Address</label>
+                <input
+                  type="email"
+                  value={googleEmail}
+                  onChange={(e) => setGoogleEmail(e.target.value)}
+                  placeholder="yourname@umak.edu.ph"
+                  required
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-umak-navy"
+                />
               </div>
 
-              {/* Quick Select Buttons */}
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => handleDemoAccountSelect('k12345678@umak.edu.ph', 'Karl Ryan (Heron Student)')}
-                  className="w-full p-3 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-umak-navy text-white font-bold flex items-center justify-center text-xs">
-                      KR
-                    </div>
-                    <div>
-                      <p className="font-bold text-xs text-slate-900 group-hover:text-emerald-700">Karl Ryan (Heron Student)</p>
-                      <p className="text-[11px] text-slate-500 font-mono">k12345678@umak.edu.ph</p>
-                    </div>
-                  </div>
-                  <span className="px-2 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-lg flex items-center gap-1">
-                    <i className="fa-solid fa-check text-[9px]"></i> Valid UMak
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleDemoAccountSelect('hacker.test@gmail.com', 'John Hacker')}
-                  className="w-full p-3 bg-slate-50 hover:bg-red-50 border border-slate-200 hover:border-red-300 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-red-100 text-red-700 font-bold flex items-center justify-center text-xs">
-                      JH
-                    </div>
-                    <div>
-                      <p className="font-bold text-xs text-slate-900 group-hover:text-red-700">John Hacker (Personal Gmail)</p>
-                      <p className="text-[11px] text-slate-500 font-mono">hacker.test@gmail.com</p>
-                    </div>
-                  </div>
-                  <span className="px-2 py-1 bg-red-100 text-red-800 text-[10px] font-bold rounded-lg flex items-center gap-1">
-                    <i className="fa-solid fa-ban text-[9px]"></i> Non-UMak (Block)
-                  </span>
-                </button>
-              </div>
-
-              {/* Custom Input */}
-              <form onSubmit={handleCustomSubmit} className="pt-3 border-t border-slate-100 space-y-2">
-                <label className="block text-xs font-bold text-slate-700">Or type any Google Email address to test:</label>
-                <div className="flex gap-2">
+              {mode === 'signup' && (
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">Full Name</label>
                   <input
-                    type="email"
-                    value={customEmail}
-                    onChange={(e) => setCustomEmail(e.target.value)}
-                    placeholder="user@umak.edu.ph or user@gmail.com"
-                    required
-                    className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-umak-orange"
+                    type="text"
+                    value={googleName}
+                    onChange={(e) => setGoogleName(e.target.value)}
+                    placeholder="e.g. Juan Cruz"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-umak-navy"
                   />
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-umak-navy hover:bg-umak-navydark text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
-                  >
-                    Test Sign In
-                  </button>
                 </div>
-              </form>
+              )}
 
-            </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEmailModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-umak-navy hover:bg-umak-navydark text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+                >
+                  Continue with Google
+                </button>
+              </div>
+            </form>
 
           </div>
         </div>
@@ -222,3 +200,4 @@ export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, 
     </>
   );
 }
+
