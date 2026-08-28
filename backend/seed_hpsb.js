@@ -5,9 +5,11 @@ async function seedHPSB() {
   try {
     const connection = await mysql.createConnection({
       host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 3306,
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'ipark_umak'
+      database: process.env.DB_NAME || 'ipark_umak',
+      ssl: process.env.DB_HOST && process.env.DB_HOST.includes('aivencloud.com') ? { rejectUnauthorized: false } : undefined
     });
 
     console.log('Connected to MySQL. Updating database for HPSB Building Levels (Lvl 1 to 4)...');
