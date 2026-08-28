@@ -50,6 +50,12 @@ async function initAuthDB() {
     try {
       await connection.query('ALTER TABLE users ADD COLUMN unlock_requested_at DATETIME NULL');
     } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE users ADD COLUMN reset_otp VARCHAR(10) NULL');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE users ADD COLUMN reset_otp_expires DATETIME NULL');
+    } catch (e) {}
 
     console.log('✓ Users table created/updated with verification fields successfully.');
 

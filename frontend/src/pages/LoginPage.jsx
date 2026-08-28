@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { API_BASE_URL } from '../config/api';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -11,6 +13,7 @@ export const LoginPage = () => {
 
   // Mode: 'signin' | 'signup' | 'verify'
   const [authMode, setAuthMode] = useState('signin');
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState('');
   const [otpInput, setOtpInput] = useState(['', '', '', '', '', '']);
   const [formData, setFormData] = useState({ name: '', email: '', password: '', confirmPassword: '' });
@@ -176,6 +179,55 @@ export const LoginPage = () => {
     }
   };
 
+  // Google OAuth Login Handler (With Strict @umak.edu.ph backend check)
+  const handleGoogleLogin = async (googleData) => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/google-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(googleData)
+      });
+
+      const data = await res.json();
+      setLoading(false);
+
+      if (!res.ok) {
+        if (res.status === 423 || data.isLocked) {
+          setLockoutInfo({
+            email: data.email || (googleData.user?.email || ''),
+            unlockRequested: !!data.unlockRequested,
+            requestLoading: false
+          });
+        }
+        setError(data.error || 'Google Sign-In failed.');
+        return;
+      }
+
+      if (data.requiresVerification) {
+        setVerifyEmail(data.email);
+        setOtpInput(['', '', '', '', '', '']);
+        setAuthMode('verify');
+        setSuccess(data.message || 'A 6-digit verification code has been sent to your @umak.edu.ph email inbox.');
+        return;
+      }
+
+      // Success Google Sign-In for Verified Users
+      loginUser(data.user, data.token);
+      setSuccess(data.message || `Welcome back, ${data.user.name}!`);
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 300);
+
+    } catch (err) {
+      setLoading(false);
+      setError('Connection error: Could not reach backend for Google Sign-In verification.');
+    }
+  };
+
   // Submit OTP Verification Code
   const handleVerifySubmit = async (e) => {
     e.preventDefault();
@@ -199,6 +251,13 @@ export const LoginPage = () => {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 423 || data.isLocked) {
+          setLockoutInfo({
+            email: verifyEmail,
+            unlockRequested: !!data.unlockRequested,
+            requestLoading: false
+          });
+        }
         setError(data.error || 'Invalid verification code. Please check and try again.');
         setLoading(false);
         return;
@@ -302,6 +361,16 @@ export const LoginPage = () => {
               @umak.edu.ph
             </span>
           </div>
+
+          {/* Google Sign-In Button */}
+          {authMode !== 'verify' && (
+            <GoogleSignInButton
+              mode={authMode}
+              onGoogleSuccess={handleGoogleLogin}
+              onError={setError}
+              loading={loading}
+            />
+          )}
 
           {/* Tabs for Sign In vs Sign Up */}
           {authMode !== 'verify' && (
@@ -437,7 +506,18 @@ export const LoginPage = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-slate-700">Password</label>
+                  {authMode === 'signin' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsForgotModalOpen(true)}
+                      className="text-[11px] font-bold text-umak-orange hover:underline cursor-pointer"
+                    >
+                      Forgot Password?
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <i className="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                   <input
@@ -542,12 +622,12 @@ export const LoginPage = () => {
                 ) : authMode === 'signin' ? (
                   <>
                     <i className="fa-solid fa-right-to-bracket"></i>
-                    Sign In to Portal
+                    Sign In using UMak Email
                   </>
                 ) : (
                   <>
                     <i className="fa-solid fa-paper-plane"></i>
-                    Send Verification Code
+                    Send Verification Code to UMak Email
                   </>
                 )}
               </button>
@@ -630,6 +710,13 @@ export const LoginPage = () => {
       </main>
 
       <Footer />
+
+      {/* FORGOT PASSWORD MODAL */}
+      <ForgotPasswordModal
+        isOpen={isForgotModalOpen}
+        onClose={() => setIsForgotModalOpen(false)}
+        onSwitchToLogin={() => setAuthMode('signin')}
+      />
     </div>
   );
 };

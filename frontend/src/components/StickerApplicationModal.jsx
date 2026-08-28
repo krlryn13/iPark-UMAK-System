@@ -230,9 +230,7 @@ export const StickerApplicationModal = ({ isOpen, onClose, onSuccess }) => {
       submitData.append('license_number', formData.license_number);
       submitData.append('payment_method', 'PayMongo API');
 
-      if (files.student_id_doc) submitData.append('student_id_doc', files.student_id_doc);
-      if (files.or_cr_doc) submitData.append('or_cr_doc', files.or_cr_doc);
-      if (files.license_doc) submitData.append('license_doc', files.license_doc);
+      // Only send payment_proof_doc for Step 2 payment verification (Step 1 docs are already safely saved)
       if (files.payment_proof_doc) submitData.append('payment_proof_doc', files.payment_proof_doc);
 
       const res = await authFetch(`${API_BASE_URL}/api/stickers/apply`, {

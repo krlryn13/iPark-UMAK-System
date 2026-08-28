@@ -11,6 +11,14 @@ router.post('/resend-code', resendLimiter, authController.resendCode);
 router.post('/login', authLimiter, authController.login);
 router.post('/request-unlock', authLimiter, authController.requestUnlock);
 
+// Password Reset Endpoints (Forgot Password Flow)
+router.post('/forgot-password', authLimiter, authController.forgotPassword);
+router.post('/verify-reset-otp', authLimiter, authController.verifyResetOtp);
+router.post('/reset-password', authLimiter, authController.resetPassword);
+
+// Google OAuth 2.0 Sign-In Endpoint
+router.post('/google-login', authLimiter, authController.googleLogin);
+
 // Protected — validate token and return user data
 router.get('/me', authenticateToken, authController.getMe);
 

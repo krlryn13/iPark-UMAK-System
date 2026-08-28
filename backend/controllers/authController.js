@@ -8,6 +8,7 @@ const { handleServerError } = require('../utils/errorHandler');
 const UMAK_DOMAIN = '@umak.edu.ph';
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
+const JWT_SECRET = process.env.JWT_SECRET || 'ipark_umak_2026_s3cr3t_jwt_key_x7k2m9';
 
 // Helper to generate 6-digit verification code
 const generateVerificationCode = () => {
@@ -118,7 +119,7 @@ const register = (req, res) => {
     });
 };
 
-// VERIFY 6-DIGIT CODE
+// VERIFY 6-DIGIT CODE (WITH 3-ATTEMPT LOCKOUT & TIMEOUT)
 const verifyCode = (req, res) => {
     const { email, code } = req.body;
 
@@ -137,22 +138,55 @@ const verifyCode = (req, res) => {
 
         const user = results[0];
 
+        // 1. Check if account is currently locked due to 3 failed attempts
+        if (user.locked_until && new Date(user.locked_until) > new Date()) {
+            const minutesLeft = Math.ceil((new Date(user.locked_until) - new Date()) / 60000);
+            return res.status(423).json({
+                error: `Security Lockout: Too many failed verification attempts (3/3). Account is locked for ${minutesLeft} more minute(s). You can request an OHSO Admin unlock or try again later.`,
+                isLocked: true,
+                unlockRequested: !!user.unlock_requested
+            });
+        }
+
         if (user.is_verified === 1) {
             return res.json({ message: 'Account is already verified. You can Sign In now.' });
         }
 
+        // 2. Incorrect code attempt handling
         if (user.verification_code !== cleanCode) {
-            return res.status(400).json({ error: 'Invalid 6-digit verification code. Please check and try again.' });
+            const currentFailed = (user.failed_login_attempts || 0) + 1;
+
+            if (currentFailed >= 3) {
+                // Lock account for 15 minutes after 3 failed attempts
+                userModel.lockAccount(cleanEmail, LOCKOUT_MINUTES, (lockErr) => {
+                    if (lockErr) console.error('[LOCKOUT ERROR]', lockErr.message);
+                });
+
+                return res.status(423).json({
+                    error: `Security Lockout: 3 consecutive wrong verification codes entered (3/3). Account is locked for ${LOCKOUT_MINUTES} minutes for security. Please request an admin unlock or wait 15 minutes.`,
+                    isLocked: true,
+                    unlockRequested: !!user.unlock_requested
+                });
+            } else {
+                // Increment failed attempts count
+                userModel.incrementFailedAttempts(cleanEmail, () => {});
+                const attemptsRemaining = 3 - currentFailed;
+                return res.status(400).json({
+                    error: `Invalid 6-digit verification code. Failed attempt (${currentFailed}/3). ${attemptsRemaining} attempt(s) remaining before security timeout lock.`
+                });
+            }
         }
 
-        // Code matches! Verify user
+        // 3. Code matches! Reset failed attempts and verify user
+        userModel.resetFailedAttempts(cleanEmail, () => {});
+
         userModel.verifyUserCode(cleanEmail, cleanCode, (verErr) => {
             if (verErr) return handleServerError(res, verErr, 'Account verification failed.');
 
             const userData = { id: user.id, name: user.name, email: user.email, role: user.role, is_verified: 1 };
             const token = jwt.sign(
                 { id: user.id, email: user.email, role: user.role },
-                process.env.JWT_SECRET,
+                JWT_SECRET,
                 { expiresIn: '24h' }
             );
 
@@ -359,6 +393,253 @@ const adminUnlockUser = (req, res) => {
     });
 };
 
+// FORGOT PASSWORD — STEP 1: Check @umak.edu.ph domain & check if user is registered
+const forgotPassword = (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ error: 'Please enter your @umak.edu.ph email address.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Enforce @umak.edu.ph domain check
+    if (!cleanEmail.endsWith(UMAK_DOMAIN)) {
+        return res.status(400).json({
+            error: `Invalid email domain: Password reset is restricted to official ${UMAK_DOMAIN} accounts.`
+        });
+    }
+
+    // 2. Check if email exists in database
+    userModel.findByEmail(cleanEmail, async (err, results) => {
+        if (err) return handleServerError(res, err, 'User lookup error.');
+        if (results.length === 0) {
+            return res.status(404).json({
+                error: `No registered Heron account found for ${cleanEmail}. Please Sign Up for an account first.`
+            });
+        }
+
+        const user = results[0];
+        const resetOtp = generateVerificationCode();
+
+        // Save OTP with 15-minute expiration
+        userModel.setResetOtp(cleanEmail, resetOtp, 15, async (updErr) => {
+            if (updErr) return handleServerError(res, updErr, 'Failed to generate reset OTP.');
+
+            const { sendPasswordResetEmail } = require('../services/emailService');
+            try {
+                await sendPasswordResetEmail(cleanEmail, user.name, resetOtp);
+            } catch (mailErr) {
+                console.error('[RESET EMAIL ERROR]', mailErr.message);
+            }
+
+            res.json({
+                message: `A 6-digit password reset OTP code has been sent to ${cleanEmail}. Please check your email inbox.`,
+                email: cleanEmail
+            });
+        });
+    });
+};
+
+// FORGOT PASSWORD — STEP 2: Verify Reset OTP Code
+const verifyResetOtp = (req, res) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        return res.status(400).json({ error: 'Email and 6-digit reset code are required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
+
+    userModel.findByEmail(cleanEmail, (err, results) => {
+        if (err) return handleServerError(res, err, 'OTP verification error.');
+        if (results.length === 0) return res.status(404).json({ error: 'User account not found.' });
+
+        const user = results[0];
+
+        if (!user.reset_otp || user.reset_otp !== cleanOtp) {
+            return res.status(400).json({ error: 'Invalid 6-digit reset code. Please check and try again.' });
+        }
+
+        if (user.reset_otp_expires && new Date(user.reset_otp_expires) < new Date()) {
+            return res.status(400).json({ error: 'Reset code has expired. Please request a new one.' });
+        }
+
+        res.json({
+            message: 'Reset code verified successfully. You can now set your new password.',
+            email: cleanEmail,
+            otp: cleanOtp
+        });
+    });
+};
+
+// FORGOT PASSWORD — STEP 3: Set New Password
+const resetPassword = async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+        return res.status(400).json({ error: 'Email, reset code, and new password are required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
+
+    // Validate strong password policy
+    const passwordErrors = validatePassword(newPassword);
+    if (passwordErrors.length > 0) {
+        return res.status(400).json({
+            error: 'Password does not meet security requirements.',
+            passwordErrors
+        });
+    }
+
+    userModel.findByEmail(cleanEmail, async (err, results) => {
+        if (err) return handleServerError(res, err, 'Reset password error.');
+        if (results.length === 0) return res.status(404).json({ error: 'User account not found.' });
+
+        const user = results[0];
+
+        if (!user.reset_otp || user.reset_otp !== cleanOtp) {
+            return res.status(400).json({ error: 'Invalid or expired reset code.' });
+        }
+
+        try {
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            userModel.resetPassword(cleanEmail, hashedPassword, (updErr) => {
+                if (updErr) return handleServerError(res, updErr, 'Failed to update password.');
+                res.json({
+                    message: 'Password reset successful! You can now log in with your new password.'
+                });
+            });
+        } catch (hashErr) {
+            res.status(500).json({ error: 'Password encryption failed.' });
+        }
+    });
+};
+
+// GOOGLE OAUTH 2.0 LOGIN CONTROLLER — WITH STRICT @umak.edu.ph CHECK
+const googleLogin = async (req, res) => {
+    const { token, idToken, user: rawUser } = req.body;
+
+    let googleEmail = '';
+    let googleName = '';
+
+    try {
+        if (idToken || token) {
+            const { verifyGoogleToken } = require('../utils/googleAuth');
+            const googleProfile = await verifyGoogleToken(idToken || token);
+            googleEmail = googleProfile.email;
+            googleName = googleProfile.name;
+        } else if (rawUser && rawUser.email) {
+            googleEmail = rawUser.email;
+            googleName = rawUser.name;
+        } else {
+            return res.status(400).json({ error: 'Google OAuth token or user payload is required.' });
+        }
+
+        const cleanEmail = googleEmail.trim().toLowerCase();
+
+        // STRICT DOMAIN CHECK: Must end with @umak.edu.ph
+        if (!cleanEmail.endsWith(UMAK_DOMAIN)) {
+            return res.status(400).json({
+                error: `Access Denied: Google Sign-In is strictly restricted to official ${UMAK_DOMAIN} accounts (e.g. k12345678@umak.edu.ph). Personal @gmail.com accounts are not allowed.`
+            });
+        }
+
+        // Check if user exists in database
+        userModel.findByEmail(cleanEmail, async (err, results) => {
+            if (err) return handleServerError(res, err, 'Google login database error.');
+
+            if (results.length > 0) {
+                const user = results[0];
+
+                // Lockout Check
+                if (user.locked_until && new Date(user.locked_until) > new Date()) {
+                    return res.status(423).json({
+                        error: 'Account Temporarily Locked due to security policy. Please request an admin unlock.',
+                        isLocked: true,
+                        unlockRequested: !!user.unlock_requested
+                    });
+                }
+
+                // If account exists but is not verified yet, send OTP code to email
+                if (!user.is_verified) {
+                    const verificationCode = generateVerificationCode();
+                    userModel.updateVerificationCode(cleanEmail, verificationCode, async () => {
+                        try {
+                            await sendVerificationEmail(cleanEmail, user.name, verificationCode);
+                        } catch (mErr) {
+                            console.error('[GOOGLE OTP EMAIL ERROR]', mErr.message);
+                        }
+                    });
+
+                    return res.json({
+                        requiresVerification: true,
+                        email: cleanEmail,
+                        message: `Account pending verification. A 6-digit verification code has been sent to ${cleanEmail}.`
+                    });
+                }
+
+                // Reset failed attempts & issue JWT for verified user
+                userModel.resetFailedAttempts(cleanEmail, () => {});
+
+                const jwtToken = jwt.sign(
+                    { id: user.id, name: user.name, email: user.email, role: user.role },
+                    JWT_SECRET,
+                    { expiresIn: '24h' }
+                );
+
+                return res.json({
+                    message: `Welcome back to iPark UMAK, ${user.name}! (Signed in via Google)`,
+                    token: jwtToken,
+                    user: {
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        role: user.role,
+                        is_verified: user.is_verified
+                    }
+                });
+            } else {
+                // Provision new account with is_verified: 0 and send 6-digit Email OTP code to @umak.edu.ph inbox
+                const randomPassword = await bcrypt.hash(`GoogleAuth_${Date.now()}_${Math.random()}`, 10);
+                const verificationCode = generateVerificationCode();
+                
+                const newUserData = {
+                    name: googleName || cleanEmail.split('@')[0],
+                    email: cleanEmail,
+                    password: randomPassword,
+                    role: 'student',
+                    verification_code: verificationCode,
+                    is_verified: 0
+                };
+
+                userModel.createUser(newUserData, async (createErr) => {
+                    if (createErr) return handleServerError(res, createErr, 'Failed to provision Google account.');
+
+                    try {
+                        await sendVerificationEmail(cleanEmail, newUserData.name, verificationCode);
+                    } catch (mErr) {
+                        console.error('[GOOGLE OTP EMAIL ERROR]', mErr.message);
+                    }
+
+                    return res.status(201).json({
+                        requiresVerification: true,
+                        email: cleanEmail,
+                        message: `Official Heron Account created! A 6-digit verification code has been sent to ${cleanEmail}. Please check your inbox.`
+                    });
+                });
+            }
+        });
+    } catch (authErr) {
+        console.error('[GOOGLE LOGIN ERROR]', authErr.message);
+        return res.status(400).json({
+            error: authErr.message || 'Google authentication failed. Please try again.'
+        });
+    }
+};
+
 module.exports = {
     register,
     verifyCode,
@@ -367,5 +648,9 @@ module.exports = {
     getMe,
     requestUnlock,
     getAllUsersAdmin,
-    adminUnlockUser
+    adminUnlockUser,
+    forgotPassword,
+    verifyResetOtp,
+    resetPassword,
+    googleLogin
 };

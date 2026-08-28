@@ -71,4 +71,15 @@ const updatePendingApplication = (id, updateData, callback) => {
   db.query(sql, values, callback);
 };
 
-module.exports = { createApplication, getByUserId, getAllApplications, updateStatus, updatePendingApplication };
+const getByRefOrStickerNumber = (identifier, callback) => {
+  db.query(
+    'SELECT * FROM vehicle_stickers WHERE payment_ref_no = ? OR sticker_number = ? OR id = ? LIMIT 1',
+    [identifier, identifier, identifier],
+    (err, results) => {
+      if (err) return callback(err);
+      callback(null, results && results.length > 0 ? results[0] : null);
+    }
+  );
+};
+
+module.exports = { createApplication, getByUserId, getAllApplications, updateStatus, updatePendingApplication, getByRefOrStickerNumber };

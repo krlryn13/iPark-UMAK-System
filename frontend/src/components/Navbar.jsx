@@ -13,8 +13,41 @@ export const Navbar = () => {
   const isHome = location.pathname === '/';
   const isLogin = location.pathname === '/login';
 
+  // Helper: get actual navbar pixel height at runtime
+  const getNavbarHeight = () => {
+    const nav = document.getElementById('main-navbar');
+    return nav ? nav.offsetHeight : 116;
+  };
+
+  // Set CSS variable for navbar height
+  React.useEffect(() => {
+    const updateNavbarHeight = () => {
+      const nav = document.getElementById('main-navbar');
+      if (nav) {
+        document.documentElement.style.setProperty('--navbar-h', `${nav.offsetHeight}px`);
+      }
+    };
+    
+    updateNavbarHeight();
+    window.addEventListener('resize', updateNavbarHeight, { passive: true });
+    return () => window.removeEventListener('resize', updateNavbarHeight);
+  }, []);
+
+  // Auto-close mobile menu on scroll
+  React.useEffect(() => {
+    const handleScrollCloseMenu = () => {
+      if (mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('scroll', handleScrollCloseMenu, { passive: true });
+    return () => window.removeEventListener('scroll', handleScrollCloseMenu);
+  }, [mobileMenuOpen]);
+
   // ScrollSpy state for active section on landing page
   const [activeSection, setActiveSection] = React.useState('home');
+  const isManualScrollingRef = React.useRef(false);
+  const scrollTimeoutRef = React.useRef(null);
 
   React.useEffect(() => {
     if (!isHome) return;
@@ -22,23 +55,26 @@ export const Navbar = () => {
     const sections = ['home', 'sticker-guide', 'features', 'about', 'team'];
 
     const updateActiveSection = () => {
-      // 1. If at top of page, activate 'home'
-      if (window.scrollY < 160) {
+      if (isManualScrollingRef.current) return;
+
+      const navH = getNavbarHeight();
+
+      if (window.scrollY < navH + 20) {
         setActiveSection('home');
         return;
       }
 
-      // 2. Determine active section based on top position in document
-      const viewPoint = window.scrollY + 240; // View point offset below navbar
+      // Check which section is currently visible right below the navbar
+      const checkPoint = window.scrollY + navH + 40;
       let active = 'home';
 
       for (let i = 0; i < sections.length; i++) {
-        const id = sections[i];
-        const el = document.getElementById(id);
+        const el = document.getElementById(sections[i]);
         if (el) {
-          const top = el.getBoundingClientRect().top + window.scrollY;
-          if (viewPoint >= top) {
-            active = id;
+          const rect = el.getBoundingClientRect();
+          const sectionTop = rect.top + window.scrollY;
+          if (checkPoint >= sectionTop) {
+            active = sections[i];
           }
         }
       }
@@ -77,18 +113,27 @@ export const Navbar = () => {
       navigate(`/#${sectionId}`);
       return;
     }
-    e.preventDefault();
+    if (e) e.preventDefault();
+
+    isManualScrollingRef.current = true;
+    setActiveSection(sectionId);
+
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      isManualScrollingRef.current = false;
+    }, 850);
+
     if (sectionId === 'home') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      setActiveSection('home');
       return;
     }
+
     const el = document.getElementById(sectionId);
     if (el) {
+      const navH = getNavbarHeight();
       const rect = el.getBoundingClientRect();
-      const targetY = rect.top + window.scrollY - 140; // Generous 140px offset below navbar
-      window.scrollTo({ top: targetY >= 0 ? targetY : 0, behavior: 'smooth' });
-      setActiveSection(sectionId);
+      const targetY = rect.top + window.scrollY - navH;
+      window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
     }
   };
 
@@ -104,7 +149,7 @@ export const Navbar = () => {
   };
 
   return (
-    <div className="sticky top-0 z-50 w-full shadow-sm">
+    <div id="main-navbar" className="sticky top-0 z-50 w-full shadow-sm">
       {/* TOP ANNOUNCEMENT BAR */}
       <div className="bg-umak-navydark text-xs py-2.5 px-4 text-slate-200 flex justify-between items-center shadow-inner">
         <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
@@ -223,7 +268,7 @@ export const Navbar = () => {
                 }`}
               >
                 <i className="fa-solid fa-right-to-bracket mr-1.5 sm:mr-2"></i>
-                <span className="hidden xs:inline">Portal </span>Login
+                <span className="hidden sm:inline">Portal </span>Login
               </button>
             )}
 

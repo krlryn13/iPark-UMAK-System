@@ -80,8 +80,25 @@ const adminUnlockUser = (userId, callback) => {
     );
 };
 
+const setResetOtp = (email, otp, expiresMinutes, callback) => {
+    db.query(
+        'UPDATE users SET reset_otp = ?, reset_otp_expires = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE email = ?',
+        [otp, expiresMinutes, email],
+        callback
+    );
+};
+
+const resetPassword = (email, newHashedPassword, callback) => {
+    db.query(
+        'UPDATE users SET password = ?, reset_otp = NULL, reset_otp_expires = NULL, locked_until = NULL, failed_login_attempts = 0 WHERE email = ?',
+        [newHashedPassword, email],
+        callback
+    );
+};
+
 module.exports = {
     findByEmail, createUser, verifyUserCode, updateVerificationCode, findById,
     incrementFailedAttempts, resetFailedAttempts, lockAccount,
-    requestUnlock, getAllUsersAdmin, adminUnlockUser
+    requestUnlock, getAllUsersAdmin, adminUnlockUser,
+    setResetOtp, resetPassword
 };

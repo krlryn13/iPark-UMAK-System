@@ -388,10 +388,20 @@ const sendStickerStatusEmail = async (toEmail, applicantName, status, stickerNum
               </p>
               
               ${isApproved ? `
-              <div style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:14px;padding:20px;margin-bottom:24px;">
+              <div style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:14px;padding:20px;margin-bottom:20px;">
                 <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:1px;">Assigned Sticker Number</p>
                 <p style="margin:0;font-size:24px;font-weight:900;color:#15803D;font-family:monospace;">${stickerNumber}</p>
               </div>
+
+              <!-- Official Gate Verification QR Code -->
+              <div style="text-align:center;margin-bottom:24px;padding:20px;background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:16px;">
+                <p style="margin:0 0 10px;font-size:11px;font-weight:800;color:#0A1F5C;text-transform:uppercase;letter-spacing:1px;">Official Campus Gate Pass QR Code</p>
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`https://ipark-umak.edu.ph/verify-sticker?sticker=${stickerNumber || plateNumber}`)}" alt="UMak Gate QR Pass" width="180" height="180" style="display:block;margin:0 auto;border-radius:12px;border:1px solid #CBD5E1;" />
+                <p style="margin:10px 0 0;font-size:11px;color:#64748B;line-height:1.4;">
+                  Present this QR Code to UMak Security Officers at the Campus Gate for instant verification.
+                </p>
+              </div>
+
               <p style="margin:0 0 16px;font-size:13px;color:#334155;line-height:1.6;">
                 <strong>Pickup Location:</strong> Occupational Health & Safety Office (OHSO) — Basement of Admin Building.
               </p>
@@ -573,10 +583,70 @@ const sendAccountUnlockedEmail = async (toEmail, userName) => {
   }
 };
 
+/**
+ * Sends Password Reset OTP email
+ */
+const sendPasswordResetEmail = async (toEmail, name, otp) => {
+  try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
+
+    const mailOptions = {
+      from: `"iPark UMAK" <${process.env.EMAIL_USER}>`,
+      replyTo: process.env.EMAIL_USER,
+      to: toEmail,
+      subject: 'iPark UMAK — Password Reset Verification Code',
+      text: `Hi ${name},\n\nYour 6-digit password reset OTP is: ${otp}\n\nThis code expires in 15 minutes. If you did not request a password reset, please ignore this email.\n\nThank you,\nUniversity of Makati - iPark UMAK System`,
+      html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Reset Password</title></head>
+<body style="margin:0;padding:0;background-color:#EEF2F7;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #DDE3EE;">
+          <tr>
+            <td style="background:#0A1F5C;padding:24px 32px;color:#ffffff;">
+              <span style="font-size:20px;font-weight:900;">iPark <span style="color:#F5821F;">UMAK</span></span>
+              <p style="margin:4px 0 0;font-size:11px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1px;">Password Reset Verification</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 10px;font-size:20px;color:#0A1F5C;">Reset Your Password</h2>
+              <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;">
+                Hello <strong>${name}</strong>, we received a request to reset your password for your iPark UMAK account.
+              </p>
+              <div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:16px;padding:20px;text-align:center;margin-bottom:24px;">
+                <p style="margin:0 0 6px;font-size:11px;font-weight:800;color:#92400E;text-transform:uppercase;letter-spacing:1px;">One-Time Reset Code (Expires in 15 mins)</p>
+                <p style="margin:0;font-size:32px;font-weight:900;color:#F5821F;letter-spacing:6px;font-family:monospace;">${otp}</p>
+              </div>
+              <p style="margin:0;font-size:12px;color:#64748B;line-height:1.5;">
+                If you did not request a password reset, please ignore this email or contact OHSO security immediately.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`[RESET EMAIL SENT] Password reset code sent to ${toEmail}`);
+  } catch (err) {
+    console.error(`[RESET EMAIL ERROR] Failed to send email to ${toEmail}:`, err.message);
+  }
+};
+
 module.exports = {
   sendVerificationEmail,
   sendGuestPassEmail,
   sendStickerStatusEmail,
   sendGuestPassStatusEmail,
-  sendAccountUnlockedEmail
+  sendAccountUnlockedEmail,
+  sendPasswordResetEmail
 };

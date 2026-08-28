@@ -24,6 +24,9 @@ const handleUploadMiddleware = (req, res, next) => {
   });
 };
 
+// Public verification for Security Guards / Scanners
+router.get('/verify/:identifier', stickerController.verifyStickerPublic);
+
 // Authenticated user
 router.post('/apply', authenticateToken, handleUploadMiddleware, stickerController.applySticker);
 router.get('/user/:userId', authenticateToken, stickerController.getUserStickers);

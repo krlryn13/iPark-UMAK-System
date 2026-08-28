@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ import { useInView } from '../hooks/useInView';
 
 export const LandingPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser, loading } = useAuth();
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
@@ -20,6 +21,23 @@ export const LandingPage = () => {
   const [featuresRef, featuresInView] = useInView({ threshold: 0.1 });
   const [aboutRef, aboutInView] = useInView({ threshold: 0.15 });
   const [teamRef, teamInView] = useInView({ threshold: 0.1 });
+
+  // Handle initial page load or navigation with location hash (e.g. /#team)
+  useEffect(() => {
+    if (location.hash) {
+      const id = location.hash.replace('#', '');
+      const el = document.getElementById(id);
+      if (el) {
+        setTimeout(() => {
+          const nav = document.getElementById('main-navbar');
+          const navH = nav ? nav.offsetHeight : 116;
+          const rect = el.getBoundingClientRect();
+          const targetY = rect.top + window.scrollY - navH;
+          window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
+        }, 200);
+      }
+    }
+  }, [location.hash]);
 
   // If user is already logged in, automatically redirect to Dashboard
   useEffect(() => {
@@ -84,7 +102,7 @@ export const LandingPage = () => {
 
       <main className="flex-grow">
         {/* HERO SECTION WITH UMAK.JPG BACKGROUND */}
-        <section id="home" className="relative pt-16 pb-24 md:pt-24 md:pb-32 bg-[url('/umak.jpg')] bg-cover bg-center bg-no-repeat border-b border-slate-200/80 overflow-hidden scroll-mt-44">
+        <section id="home" className="relative pt-16 pb-24 md:pt-24 md:pb-32 bg-[url('/umak.jpg')] bg-cover bg-center bg-no-repeat border-b border-slate-200/80 overflow-hidden scroll-mt-[116px]">
           {/* Light Mode Glass/Gradient Overlay - Lightened so umak.jpg is clearly visible */}
           <div className="absolute inset-0 bg-gradient-to-b from-white/45 via-white/35 to-slate-100/50 pointer-events-none"></div>
           
@@ -115,7 +133,7 @@ export const LandingPage = () => {
               {currentUser ? (
                 <button
                   onClick={() => navigate('/dashboard')}
-                  className="w-full sm:w-auto px-8 py-4 text-base font-bold text-white bg-umak-navy hover:bg-umak-navydark rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer group min-h-[52px]"
+                  className="w-full sm:w-auto px-5 sm:px-8 py-4 text-sm sm:text-base font-bold text-white bg-umak-navy hover:bg-umak-navydark rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer group min-h-[52px]"
                 >
                   <i className="fa-solid fa-gauge text-umak-orange group-hover:scale-110 transition-transform"></i>
                   <span>Go to My Dashboard</span>
@@ -123,7 +141,7 @@ export const LandingPage = () => {
               ) : (
                 <button
                   onClick={() => navigate('/login')}
-                  className="w-full sm:w-auto px-8 py-4 text-base font-bold text-white bg-umak-orange hover:bg-umak-orangelight rounded-xl shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer group min-h-[52px]"
+                  className="w-full sm:w-auto px-5 sm:px-8 py-4 text-sm sm:text-base font-bold text-white bg-umak-orange hover:bg-umak-orangelight rounded-xl shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer group min-h-[52px]"
                 >
                   <i className="fa-solid fa-right-to-bracket text-white group-hover:translate-x-1 transition-transform"></i>
                   <span>Get Started / Sign In</span>
@@ -132,7 +150,7 @@ export const LandingPage = () => {
 
               <button
                 onClick={() => setIsGuestModalOpen(true)}
-                className="w-full sm:w-auto px-8 py-4 text-base font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-xl shadow-sm transition-all duration-200 flex items-center justify-center gap-2.5 cursor-pointer min-h-[52px]"
+                className="w-full sm:w-auto px-5 sm:px-8 py-4 text-sm sm:text-base font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-xl shadow-sm transition-all duration-200 flex items-center justify-center gap-2.5 cursor-pointer min-h-[52px]"
               >
                 <i className="fa-solid fa-calendar-check text-emerald-600"></i>
                 <span>Guest / Event Parking Pass</span>
@@ -140,7 +158,18 @@ export const LandingPage = () => {
 
               <a
                 href="#sticker-guide"
-                className="w-full sm:w-auto px-8 py-4 text-base font-semibold text-slate-700 hover:text-umak-navy bg-white hover:bg-slate-50 border border-slate-300 hover:border-slate-400 rounded-xl shadow-sm transition-all duration-200 flex items-center justify-center gap-2.5 min-h-[52px]"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const el = document.getElementById('sticker-guide');
+                  if (el) {
+                    const nav = document.getElementById('main-navbar');
+                    const navH = nav ? nav.offsetHeight : 116;
+                    const rect = el.getBoundingClientRect();
+                    const targetY = rect.top + window.scrollY - navH;
+                    window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
+                  }
+                }}
+                className="w-full sm:w-auto px-5 sm:px-8 py-4 text-sm sm:text-base font-semibold text-slate-700 hover:text-umak-navy bg-white hover:bg-slate-50 border border-slate-300 hover:border-slate-400 rounded-xl shadow-sm transition-all duration-200 flex items-center justify-center gap-2.5 min-h-[52px]"
               >
                 <i className="fa-solid fa-id-card text-umak-orange"></i>
                 <span>Vehicle Sticker Guide (₱200)</span>
@@ -175,7 +204,7 @@ export const LandingPage = () => {
         </section>
 
         {/* UMAK VEHICLE STICKER GUIDELINES & ONLINE PAYMENT SECTION */}
-        <section id="sticker-guide" className="py-20 bg-gradient-to-b from-umak-navy to-slate-900 text-white relative overflow-hidden scroll-mt-44">
+        <section id="sticker-guide" className="py-20 bg-gradient-to-b from-umak-navy to-slate-900 text-white relative overflow-hidden scroll-mt-[116px]">
           <div ref={stickerRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             
             <div className={`anim-fade-up text-center max-w-3xl mx-auto mb-16 space-y-3${stickerInView ? ' in-view' : ''}`}>
@@ -193,7 +222,7 @@ export const LandingPage = () => {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
               
               {/* Left Column: Requirements List */}
-              <div className={`anim-slide-left anim-delay-200 lg:col-span-6 bg-white/10 backdrop-blur-md rounded-3xl p-8 border border-white/10 space-y-6 flex flex-col justify-between h-full${stickerInView ? ' in-view' : ''}`}>
+              <div className={`anim-slide-left anim-delay-200 lg:col-span-6 bg-white/10 backdrop-blur-md rounded-3xl p-5 sm:p-8 border border-white/10 space-y-6 flex flex-col justify-between h-full${stickerInView ? ' in-view' : ''}`}>
                 <div>
                   <h3 className="text-xl font-bold font-display text-amber-400 mb-4 flex items-center gap-2">
                     <i className="fa-solid fa-list-check"></i> Sticker Application Requirements
@@ -239,7 +268,7 @@ export const LandingPage = () => {
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-amber-300 block text-xs">OHSO Office Location</span>
                         <span className="text-[10px] font-bold bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full uppercase tracking-wider group-hover:bg-amber-300">
-                          View Animated Guide ➔
+                          View Campus Map ➔
                         </span>
                       </div>
                       <span className="text-slate-300 text-xs">Admin Building - Ground Floor, Room 104.</span>
@@ -250,7 +279,7 @@ export const LandingPage = () => {
               </div>
 
               {/* Right Column: Step-by-Step Online Process */}
-              <div className={`anim-slide-right anim-delay-300 lg:col-span-6 bg-white/10 backdrop-blur-md rounded-3xl p-8 border border-white/10 space-y-6 flex flex-col justify-between h-full${stickerInView ? ' in-view' : ''}`}>
+              <div className={`anim-slide-right anim-delay-300 lg:col-span-6 bg-white/10 backdrop-blur-md rounded-3xl p-5 sm:p-8 border border-white/10 space-y-6 flex flex-col justify-between h-full${stickerInView ? ' in-view' : ''}`}>
                 <div>
                   <h3 className="text-xl font-bold font-display text-amber-400 mb-4 flex items-center gap-2">
                     <i className="fa-solid fa-route"></i> Online Step-by-Step Process
@@ -298,7 +327,7 @@ export const LandingPage = () => {
         </section>
 
         {/* FEATURE HIGHLIGHTS SECTION */}
-        <section id="features" className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-44">
+        <section id="features" className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-[116px]">
           <div ref={featuresRef} className="text-center max-w-3xl mx-auto mb-16">
             <div className={`anim-fade-in inline-flex items-center gap-2 text-xs font-extrabold text-umak-orange uppercase tracking-widest mb-2${featuresInView ? ' in-view' : ''}`}>
               <i className="fa-solid fa-star"></i> Core Features
@@ -353,9 +382,9 @@ export const LandingPage = () => {
         </section>
 
         {/* ABOUT & SYSTEM OBJECTIVES SECTION */}
-        <section id="about" className="py-20 bg-slate-100/80 border-y border-slate-200/80 scroll-mt-44">
+        <section id="about" className="py-20 bg-slate-100/80 border-y border-slate-200/80 scroll-mt-[116px]">
           <div ref={aboutRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-stretch">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-stretch">
 
               {/* Left: About Text */}
               <div className={`anim-slide-left lg:col-span-6 space-y-6 flex flex-col justify-between${aboutInView ? ' in-view' : ''}`}>
@@ -387,7 +416,7 @@ export const LandingPage = () => {
 
               {/* Right: Key Objectives List */}
               <div className={`anim-slide-right anim-delay-150 lg:col-span-6${aboutInView ? ' in-view' : ''}`}>
-                <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-md h-full flex flex-col justify-between">
+                <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-8 shadow-md h-full flex flex-col justify-between">
                   <h3 className="text-xl font-bold font-display text-slate-900 mb-6 flex items-center gap-2">
                     <i className="fa-solid fa-list-check text-umak-orange"></i> Core Objectives
                   </h3>
@@ -431,7 +460,7 @@ export const LandingPage = () => {
         </section>
 
         {/* TEAM SECTION */}
-        <section id="team" className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-44">
+        <section id="team" className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-[116px]">
           <div ref={teamRef} className="text-center max-w-3xl mx-auto mb-16">
             <div className={`anim-fade-in inline-flex items-center gap-2 text-xs font-extrabold text-umak-orange uppercase tracking-widest mb-2${teamInView ? ' in-view' : ''}`}>
               <i className="fa-solid fa-users-gear"></i> Development Team
@@ -494,7 +523,7 @@ export const LandingPage = () => {
                   </p>
                   
                   {/* Fixed min-height for perfect text card alignment across all 3 members */}
-                  <div className="min-h-[85px] flex items-center justify-center">
+                  <div className="min-h-0 sm:min-h-[85px] flex items-center justify-center">
                     <p className="text-slate-600 text-xs leading-relaxed font-normal">
                       {member.bio}
                     </p>
@@ -558,7 +587,7 @@ export const LandingPage = () => {
 
         {/* CALL TO ACTION BANNER */}
         <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-gradient-to-r from-umak-navy via-slate-900 to-umak-navydark rounded-3xl p-10 text-center text-white shadow-2xl relative overflow-hidden">
+          <div className="bg-gradient-to-r from-umak-navy via-slate-900 to-umak-navydark rounded-3xl p-6 sm:p-10 text-center text-white shadow-2xl relative overflow-hidden">
             <div className="max-w-2xl mx-auto space-y-4 relative z-10">
               <h2 className="text-3xl font-extrabold font-display">
                 {currentUser ? 'Go Directly to Your Live Parking Dashboard' : 'Ready to Check Available Campus Parking?'}

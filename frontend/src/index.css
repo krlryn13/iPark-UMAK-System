@@ -37,8 +37,8 @@
 }
 
 html {
-    scroll-behavior: smooth;
-    scroll-padding-top: 140px;
+    /* JS handles all smooth scrolling — no CSS scroll-behavior to avoid conflicts */
+    scroll-padding-top: var(--navbar-h, 116px);
 }
 
 html, body {

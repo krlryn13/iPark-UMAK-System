@@ -14,11 +14,21 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    // Sanitize extension & generate unique hash
     const ext = path.extname(file.originalname).toLowerCase();
-    const safeField = file.fieldname.replace(/[^a-zA-Z0-9]/g, '_');
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `doc-${safeField}-${uniqueSuffix}${ext}`);
+    
+    // Extract & sanitize applicant name
+    const rawName = req.body?.applicant_name || req.body?.name || 'Heron_User';
+    const safeName = rawName.trim().replace(/[^a-zA-Z0-9]/g, '_');
+    
+    // Friendly document type label
+    const docType = file.fieldname === 'student_id_doc' ? 'Student_ID'
+      : file.fieldname === 'or_cr_doc' ? 'LTO_OR_CR'
+      : file.fieldname === 'license_doc' ? 'Drivers_License'
+      : file.fieldname === 'payment_proof_doc' ? 'Payment_Receipt'
+      : file.fieldname.replace(/[^a-zA-Z0-9]/g, '_');
+
+    const uniqueSuffix = Date.now() + '-' + Math.floor(1000 + Math.random() * 9000);
+    cb(null, `${safeName}_${docType}_${uniqueSuffix}${ext}`);
   }
 });
 
