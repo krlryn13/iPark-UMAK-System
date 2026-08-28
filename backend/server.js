@@ -30,10 +30,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads/documents', express.static(path.join(__dirname, 'uploads/documents')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads/documents')));
 
-app.get('/', (req, res) => {
-    res.send('iPark UMAK API is running...');
-});
-
 app.use('/api', parkingRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/stickers', stickerRoutes);
@@ -49,6 +45,10 @@ if (require('fs').existsSync(frontendDist)) {
             return res.sendFile(path.join(frontendDist, 'index.html'));
         }
         next();
+    });
+} else {
+    app.get('/', (req, res) => {
+        res.send('iPark UMAK API is running...');
     });
 }
 
