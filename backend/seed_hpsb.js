@@ -14,6 +14,28 @@ async function seedHPSB() {
 
     console.log('Connected to MySQL. Updating database for HPSB Building Levels (Lvl 1 to 4)...');
 
+    // Ensure parking_lots and parking_slots tables exist
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS parking_lots (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        location VARCHAR(255) NOT NULL,
+        total_slots INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS parking_slots (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        lot_id INT NOT NULL,
+        slot_number VARCHAR(50) NOT NULL,
+        status ENUM('available', 'occupied', 'reserved', 'maintenance') DEFAULT 'available',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (lot_id) REFERENCES parking_lots(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     // 1. Clear existing slots and lots
     await connection.query('SET FOREIGN_KEY_CHECKS = 0');
     await connection.query('TRUNCATE TABLE parking_slots');
