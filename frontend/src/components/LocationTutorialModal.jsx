@@ -188,7 +188,7 @@ export default function LocationTutorialModal({ isOpen, onClose, locationTarget 
 
             {/* Map Container Container */}
             <div className="h-[320px] sm:h-[380px] lg:h-full min-h-[350px] w-full rounded-2xl overflow-hidden border border-slate-300 shadow-inner relative bg-slate-200 flex-1">
-              {loadError ? (
+              {loadError || showEmbedFallback ? (
                 <iframe
                   title="UMak Satellite Campus Map"
                   width="100%"
