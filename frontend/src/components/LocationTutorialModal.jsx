@@ -188,7 +188,7 @@ export default function LocationTutorialModal({ isOpen, onClose, locationTarget 
 
             {/* Map Container Container */}
             <div className="h-[320px] sm:h-[380px] lg:h-full min-h-[350px] w-full rounded-2xl overflow-hidden border border-slate-300 shadow-inner relative bg-slate-200 flex-1">
-              {showEmbedFallback || loadError || !import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
+              {loadError ? (
                 <iframe
                   title="UMak Satellite Campus Map"
                   width="100%"
@@ -201,7 +201,7 @@ export default function LocationTutorialModal({ isOpen, onClose, locationTarget 
               ) : !isLoaded ? (
                 <div className="w-full h-full flex flex-col items-center justify-center space-y-2 bg-slate-100">
                   <i className="fa-solid fa-spinner animate-spin text-2xl text-umak-orange"></i>
-                  <p className="text-xs font-bold text-slate-600">Loading Satellite Map Engine...</p>
+                  <p className="text-xs font-bold text-slate-600">Loading Real-Time Satellite Map Engine...</p>
                 </div>
               ) : (
                 <GoogleMap
