@@ -6,7 +6,8 @@ const dbConfig = {
     port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 3306,
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'ipark_umak'
+    database: process.env.DB_NAME || 'ipark_umak',
+    connectTimeout: 5000
 };
 
 // Enable SSL for cloud MySQL providers (like Aiven/Railway/PlanetScale)
