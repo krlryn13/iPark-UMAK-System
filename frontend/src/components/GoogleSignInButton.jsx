@@ -1,11 +1,27 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '295998885374-797smduubipt79vc2n6rqef4n1uq4n17.apps.googleusercontent.com';
 
 export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, mode = 'signin' }) {
 
+  useEffect(() => {
+    // Ensure GIS SDK script is in the DOM without duplicating
+    if (!window.google?.accounts?.oauth2 && !document.querySelector('script[src*="gsi/client"]')) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+  }, []);
+
   const launchGooglePopup = () => {
     try {
+      if (!window.google?.accounts?.oauth2) {
+        onError('Google Sign-In is initializing. Please click again in a moment.');
+        return;
+      }
+
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'email profile openid',
@@ -38,7 +54,7 @@ export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, 
 
       tokenClient.requestAccessToken({ prompt: 'select_account' });
     } catch (err) {
-      onError('Unable to open Google Sign-In popup. Please try again.');
+      onError('Unable to open Google Sign-In popup. Please ensure popups are allowed in your browser.');
     }
   };
 
@@ -46,20 +62,13 @@ export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, 
     if (window.google?.accounts?.oauth2) {
       launchGooglePopup();
     } else {
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.onload = () => {
+      setTimeout(() => {
         if (window.google?.accounts?.oauth2) {
           launchGooglePopup();
         } else {
-          onError('Google Sign-In SDK failed to load.');
+          onError('Google Sign-In SDK is loading. Please click again in a moment.');
         }
-      };
-      script.onerror = () => {
-        onError('Google Sign-In SDK blocked or unavailable.');
-      };
-      document.body.appendChild(script);
+      }, 300);
     }
   };
 
