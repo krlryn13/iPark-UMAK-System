@@ -22,6 +22,16 @@ export default function LocationTutorialModal({ isOpen, onClose, locationTarget 
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
   });
 
+  // Handle fallback iframe if JS API key is not present or API fails/times out
+  const [showEmbedFallback, setShowEmbedFallback] = useState(!import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
+
+  useEffect(() => {
+    if (!isLoaded && import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
+      const timer = setTimeout(() => setShowEmbedFallback(true), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoaded]);
+
   const guide = getGuideForLocation(locationTarget?.location || locationTarget?.name || locationTarget);
 
   // Close on ESC key
