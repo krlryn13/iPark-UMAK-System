@@ -44,10 +44,11 @@ app.use('/api/payment', paymentRoutes);
 const frontendDist = path.join(__dirname, '../frontend/dist');
 if (require('fs').existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
-    app.get('*', (req, res) => {
-        if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
-            res.sendFile(path.join(frontendDist, 'index.html'));
+    app.use((req, res, next) => {
+        if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+            return res.sendFile(path.join(frontendDist, 'index.html'));
         }
+        next();
     });
 }
 
