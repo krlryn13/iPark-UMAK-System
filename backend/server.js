@@ -56,6 +56,29 @@ app.use('/api/stickers', stickerRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/payment', paymentRoutes);
 
+// Diagnostic DB Health Check endpoint
+app.get('/api/db-health', (req, res) => {
+    db.query('SELECT 1 + 1 AS result', (err, rows) => {
+        if (err) {
+            return res.status(500).json({
+                status: 'error',
+                message: 'Database connection failed',
+                error: err.message,
+                code: err.code,
+                host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
+                port: process.env.DB_PORT || process.env.MYSQLPORT || 3306
+            });
+        }
+        res.json({
+            status: 'ok',
+            message: 'Database pool is connected and functioning perfectly!',
+            result: rows[0],
+            host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
+            port: process.env.DB_PORT || process.env.MYSQLPORT || 3306
+        });
+    });
+});
+
 // Serve frontend static build in production (Single-Server Deployment)
 const frontendDist = path.join(__dirname, '../frontend/dist');
 if (require('fs').existsSync(frontendDist)) {
