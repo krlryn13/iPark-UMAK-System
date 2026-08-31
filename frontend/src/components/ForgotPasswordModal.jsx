@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_BASE_URL } from '../config/api';
 
 export default function ForgotPasswordModal({ isOpen, onClose, onSwitchToLogin }) {
   const [step, setStep] = useState(1); // 1: Email, 2: OTP, 3: New Password, 4: Success
@@ -13,8 +14,6 @@ export default function ForgotPasswordModal({ isOpen, onClose, onSwitchToLogin }
   const [showPassword, setShowPassword] = useState(false);
 
   if (!isOpen) return null;
-
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
   // Password rules validation
   const hasMinLength = newPassword.length >= 8;

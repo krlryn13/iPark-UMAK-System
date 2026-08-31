@@ -7,7 +7,10 @@ const dbConfig = {
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'ipark_umak',
-    connectTimeout: 5000
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    connectTimeout: 10000
 };
 
 // Enable SSL for cloud MySQL providers (like Aiven/Railway/PlanetScale)
@@ -17,15 +20,18 @@ if (process.env.DB_HOST && process.env.DB_HOST.includes('aivencloud.com')) {
     dbConfig.ssl = { rejectUnauthorized: false };
 }
 
-const db = mysql.createConnection(dbConfig);
+// Use connection pool for production concurrency
+const db = mysql.createPool(dbConfig);
 
-db.connect((err) => {
+// Verify pool connectivity on startup
+db.getConnection((err, connection) => {
     if (err) {
         console.error('Database connection failed:', err.message);
         return;
     }
-    console.log(`Connected to MySQL database (${dbConfig.database} on ${dbConfig.host}:${dbConfig.port})!`);
-    
+    console.log(`Connected to MySQL database pool (${dbConfig.database} on ${dbConfig.host}:${dbConfig.port})!`);
+    connection.release();
+
     // Auto-create database tables on cloud startup if needed
     try {
         require('../init_auth_db');

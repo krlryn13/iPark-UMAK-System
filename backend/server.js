@@ -19,7 +19,27 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(securityHeaders);
-app.use(cors());
+
+// CORS — allow localhost for dev, and FRONTEND_URL for production (Vercel)
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5173',
+    process.env.FRONTEND_URL    // e.g. https://ipark-umak.vercel.app
+].filter(Boolean);
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, Postman, server-to-server)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+            return callback(null, true);
+        }
+        callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(sanitizeInputs);

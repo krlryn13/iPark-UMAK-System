@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api';
 
 export default function StickerVerificationModal({ isOpen, onClose, identifier }) {
   const [loading, setLoading] = useState(false);
@@ -11,8 +12,6 @@ export default function StickerVerificationModal({ isOpen, onClose, identifier }
     setLoading(true);
     setError(null);
     setVerificationData(null);
-
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
     fetch(`${API_BASE_URL}/api/stickers/verify/${encodeURIComponent(identifier)}`)
       .then((res) => {

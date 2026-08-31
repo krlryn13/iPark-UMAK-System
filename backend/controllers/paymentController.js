@@ -17,7 +17,7 @@ const createCheckoutSession = async (req, res) => {
   }
 
   const cleanRefNo = referenceNo || `PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-  const defaultReturnUrl = returnUrl || 'http://localhost:5173/dashboard';
+  const defaultReturnUrl = returnUrl || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`;
 
   try {
     const checkoutData = await paymongoService.createCheckoutSession({
