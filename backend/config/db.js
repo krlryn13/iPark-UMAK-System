@@ -2,11 +2,11 @@ const mysql = require('mysql2');
 require('dotenv').config();
 
 const dbConfig = {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 3306,
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'ipark_umak',
+    host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
+    port: (process.env.DB_PORT || process.env.MYSQLPORT) ? parseInt(process.env.DB_PORT || process.env.MYSQLPORT, 10) : 3306,
+    user: process.env.DB_USER || process.env.MYSQLUSER || 'root',
+    password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '',
+    database: process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || 'ipark_umak',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
@@ -14,9 +14,9 @@ const dbConfig = {
 };
 
 // Enable SSL for cloud MySQL providers (like Aiven/Railway/PlanetScale)
-if (process.env.DB_HOST && process.env.DB_HOST.includes('aivencloud.com')) {
+if (dbConfig.host && (dbConfig.host.includes('aivencloud.com') || dbConfig.host.includes('rlwy.net') || dbConfig.host.includes('railway'))) {
     dbConfig.ssl = { rejectUnauthorized: false };
-} else if (process.env.DB_SSL === 'true' || process.env.DB_PORT) {
+} else if (process.env.DB_SSL === 'true' || process.env.DB_PORT || process.env.MYSQLPORT) {
     dbConfig.ssl = { rejectUnauthorized: false };
 }
 
