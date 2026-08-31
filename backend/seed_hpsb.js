@@ -4,12 +4,12 @@ require('dotenv').config();
 async function seedHPSB() {
   try {
     const connection = await mysql.createConnection({
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 3306,
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'ipark_umak',
-      ssl: process.env.DB_HOST && process.env.DB_HOST.includes('aivencloud.com') ? { rejectUnauthorized: false } : undefined
+      host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
+      port: (process.env.DB_PORT || process.env.MYSQLPORT) ? parseInt(process.env.DB_PORT || process.env.MYSQLPORT, 10) : 3306,
+      user: process.env.DB_USER || process.env.MYSQLUSER || 'root',
+      password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '',
+      database: process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || 'ipark_umak',
+      ssl: (process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST.includes('aivencloud.com'))) ? { rejectUnauthorized: false } : undefined
     });
 
     console.log('Connected to MySQL. Updating database for HPSB Building Levels (Lvl 1 to 4)...');

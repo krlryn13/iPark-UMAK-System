@@ -10,13 +10,11 @@ const dbConfig = {
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    connectTimeout: 10000
+    connectTimeout: 15000
 };
 
-// Enable SSL for cloud MySQL providers (like Aiven/Railway/PlanetScale)
-if (dbConfig.host && (dbConfig.host.includes('aivencloud.com') || dbConfig.host.includes('rlwy.net') || dbConfig.host.includes('railway'))) {
-    dbConfig.ssl = { rejectUnauthorized: false };
-} else if (process.env.DB_SSL === 'true' || process.env.DB_PORT || process.env.MYSQLPORT) {
+// Enable SSL ONLY if explicitly requested or for Aiven Cloud
+if (process.env.DB_SSL === 'true' || (dbConfig.host && dbConfig.host.includes('aivencloud.com'))) {
     dbConfig.ssl = { rejectUnauthorized: false };
 }
 
