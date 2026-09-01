@@ -16,7 +16,7 @@ export const LoginPage = () => {
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState('');
   const [otpInput, setOtpInput] = useState(['', '', '', '', '', '']);
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', confirmPassword: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', confirmPassword: '', role: 'student' });
   
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -54,9 +54,11 @@ export const LoginPage = () => {
   const isSignupReady = isEmailValid && isNameValid && isPasswordStrong && isConfirmMatch;
 
   // Redirect if user is already logged in
-  if (currentUser) {
-    navigate('/dashboard');
-  }
+  React.useEffect(() => {
+    if (currentUser) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [currentUser, navigate]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -120,7 +122,7 @@ export const LoginPage = () => {
         : `${API_BASE_URL}/api/auth/login`;
 
       const bodyData = authMode === 'signup'
-        ? { name: formData.name.trim(), email: cleanEmail, password: formData.password }
+        ? { name: formData.name.trim(), email: cleanEmail, password: formData.password, role: formData.role || 'student' }
         : { email: cleanEmail, password: formData.password };
 
       const res = await fetch(endpoint, {
@@ -204,6 +206,18 @@ export const LoginPage = () => {
           });
         }
         setError(data.error || 'Google Sign-In failed.');
+        return;
+      }
+
+      if (data.requiresSetup) {
+        setAuthMode('signup');
+        setFormData(prev => ({
+          ...prev,
+          email: data.email || prev.email || '',
+          name: data.name || prev.name || '',
+          role: 'student'
+        }));
+        setSuccess(`✓ Google Account (${data.email}) Verified! Select your account classification (Student or Faculty) and set your password to complete setup.`);
         return;
       }
 
@@ -450,6 +464,40 @@ export const LoginPage = () => {
           {authMode !== 'verify' ? (
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               
+              {/* Account Type Selector for Sign Up */}
+              {authMode === 'signup' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Account Classification</label>
+                  <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, role: 'student' }))}
+                      className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                        (formData.role || 'student') === 'student'
+                          ? 'bg-umak-navy text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      <i className="fa-solid fa-user-graduate text-umak-orange"></i>
+                      <span>Student</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, role: 'faculty' }))}
+                      className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                        formData.role === 'faculty'
+                          ? 'bg-umak-navy text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      <i className="fa-solid fa-user-tie text-umak-orange"></i>
+                      <span>Faculty / Staff</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Full Name field for Sign Up */}
               {authMode === 'signup' && (
                 <div>

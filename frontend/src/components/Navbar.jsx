@@ -33,16 +33,7 @@ export const Navbar = () => {
     return () => window.removeEventListener('resize', updateNavbarHeight);
   }, []);
 
-  // Auto-close mobile menu on scroll
-  React.useEffect(() => {
-    const handleScrollCloseMenu = () => {
-      if (mobileMenuOpen) {
-        setMobileMenuOpen(false);
-      }
-    };
-    window.addEventListener('scroll', handleScrollCloseMenu, { passive: true });
-    return () => window.removeEventListener('scroll', handleScrollCloseMenu);
-  }, [mobileMenuOpen]);
+
 
   // ScrollSpy state for active section on landing page
   const [activeSection, setActiveSection] = React.useState('home');

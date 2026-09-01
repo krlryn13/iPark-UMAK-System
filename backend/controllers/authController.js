@@ -36,13 +36,14 @@ const getMe = (req, res) => {
 
 // REGISTER USER
 const register = (req, res) => {
-    const { name, email, password } = req.body;
+    const { name, email, password, role } = req.body;
 
     if (!name || !email || !password) {
         return res.status(400).json({ error: 'Please provide all required fields (name, email, password).' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    const userRole = (role && (role.toLowerCase() === 'faculty' || role.toLowerCase() === 'staff')) ? 'faculty' : 'student';
 
     // Enforce @umak.edu.ph domain
     if (!cleanEmail.endsWith(UMAK_DOMAIN)) {
@@ -95,7 +96,7 @@ const register = (req, res) => {
                 name: name.trim(), 
                 email: cleanEmail, 
                 password: hashedPassword, 
-                role: 'student',
+                role: userRole,
                 verification_code: vCode,
                 is_verified: 0
             }, async (err, result) => {
@@ -601,15 +602,36 @@ const googleLogin = async (req, res) => {
                     }
                 });
             } else {
-                // Provision new account with is_verified: 0 and send 6-digit Email OTP code to @umak.edu.ph inbox
-                const randomPassword = await bcrypt.hash(`GoogleAuth_${Date.now()}_${Math.random()}`, 10);
+                // If user doesn't exist yet, check if password & role were provided for completing registration setup
+                const { role: inputRole, password: inputPassword } = req.body;
+
+                if (!inputPassword || !inputRole) {
+                    return res.json({
+                        requiresSetup: true,
+                        email: cleanEmail,
+                        name: googleName || cleanEmail.split('@')[0],
+                        message: `Google Account (${cleanEmail}) verified! Please select your account classification (Student or Faculty) and set a password.`
+                    });
+                }
+
+                // User provided password & role for new Google account setup
+                const passwordErrors = validatePassword(inputPassword);
+                if (passwordErrors.length > 0) {
+                    return res.status(400).json({
+                        error: 'Password does not meet security requirements.',
+                        passwordErrors
+                    });
+                }
+
+                const userRole = (inputRole && (inputRole.toLowerCase() === 'faculty' || inputRole.toLowerCase() === 'staff')) ? 'faculty' : 'student';
+                const hashedPassword = await bcrypt.hash(inputPassword, 10);
                 const verificationCode = generateVerificationCode();
                 
                 const newUserData = {
                     name: googleName || cleanEmail.split('@')[0],
                     email: cleanEmail,
-                    password: randomPassword,
-                    role: 'student',
+                    password: hashedPassword,
+                    role: userRole,
                     verification_code: verificationCode,
                     is_verified: 0
                 };

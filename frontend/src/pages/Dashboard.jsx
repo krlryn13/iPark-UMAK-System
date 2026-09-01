@@ -195,22 +195,21 @@ export const Dashboard = () => {
           </div>
         </div>
 
-        {/* DASHBOARD TAB SWITCHER NAVIGATION */}
-        <div className="flex items-center bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto">
-          <button
-            onClick={() => setDashboardTab('monitor')}
-            className={`flex-1 min-w-[150px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-              dashboardTab === 'monitor'
-                ? 'bg-umak-navy text-white shadow-md'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <i className="fa-solid fa-satellite-dish text-umak-orange"></i>
-            <span>Live Parking Monitor</span>
-          </button>
+        {/* DASHBOARD TAB SWITCHER NAVIGATION (REGULAR USERS) */}
+        {!isAdmin && (
+          <div className="flex items-center bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto">
+            <button
+              onClick={() => setDashboardTab('monitor')}
+              className={`flex-1 min-w-[150px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                dashboardTab === 'monitor'
+                  ? 'bg-umak-navy text-white shadow-md'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <i className="fa-solid fa-satellite-dish text-umak-orange"></i>
+              <span>Live Parking Monitor</span>
+            </button>
 
-          {/* Regular Users: Show Sticker Application Tab */}
-          {!isAdmin && (
             <button
               onClick={() => setDashboardTab('sticker')}
               className={`flex-1 min-w-[150px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
@@ -227,28 +226,8 @@ export const Dashboard = () => {
                 </span>
               )}
             </button>
-          )}
-
-          {/* Admin Role: Show OHSO Admin Tab Only */}
-          {isAdmin && (
-            <button
-              onClick={() => setDashboardTab('admin')}
-              className={`flex-1 min-w-[150px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                dashboardTab === 'admin'
-                  ? 'bg-umak-navy text-white shadow-md'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <i className="fa-solid fa-shield-halved text-amber-400"></i>
-              <span>OHSO Approval Requests</span>
-              {adminStickers.filter(s => s.status === 'pending').length > 0 && (
-                <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold animate-bounce">
-                  {adminStickers.filter(s => s.status === 'pending').length}
-                </span>
-              )}
-            </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* ===== TAB 1: LIVE PARKING MONITOR ===== */}
         {dashboardTab === 'monitor' && (
@@ -520,107 +499,6 @@ export const Dashboard = () => {
                   </table>
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* ===== TAB 3: OHSO ADMIN APPROVAL REQUESTS (ADMIN ONLY) ===== */}
-        {isAdmin && dashboardTab === 'admin' && (
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div>
-                <span className="text-xs font-extrabold text-amber-500 uppercase tracking-wider">OHSO Security Portal</span>
-                <h3 className="text-xl font-bold font-display text-slate-900">Vehicle Sticker Verification & Document Inspection</h3>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-mono font-bold text-xs border border-slate-200">
-                {adminStickers.length} Total Submissions
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-600 font-bold uppercase border-b border-slate-200">
-                    <th className="p-3.5 rounded-l-xl">Applicant & ID</th>
-                    <th className="p-3.5">Plate & Type</th>
-                    <th className="p-3.5">LTO OR/CR & License</th>
-                    <th className="p-3.5">Uploaded Documents</th>
-                    <th className="p-3.5">Payment Ref (₱200)</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5 rounded-r-xl text-right">OHSO Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {adminStickers.map((stk) => (
-                    <tr key={stk.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-3.5">
-                        <span className="font-bold text-slate-900 block">{stk.applicant_name}</span>
-                        <span className="text-[11px] text-slate-500 font-mono">{stk.email} ({stk.student_id_num})</span>
-                      </td>
-                      <td className="p-3.5">
-                        <span className="font-bold text-slate-900 font-mono block">{stk.plate_number}</span>
-                        <span className="text-[11px] text-slate-500 capitalize">{stk.vehicle_make}</span>
-                      </td>
-                      <td className="p-3.5 font-mono text-[11px] text-slate-600">
-                        <div>OR: {stk.or_number}</div>
-                        <div>CR: {stk.cr_number}</div>
-                        <div>Lic: {stk.license_number}</div>
-                      </td>
-                      <td className="p-3.5">
-                        <button
-                          onClick={() => setInspectApplication(stk)}
-                          className="px-3 py-1.5 bg-umak-navy hover:bg-umak-navydark text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer inline-flex items-center gap-1.5"
-                        >
-                          <i className="fa-solid fa-images text-amber-400"></i> Inspect Photos
-                        </button>
-                      </td>
-                      <td className="p-3.5 font-mono">
-                        <span className="font-bold text-emerald-600 block">{stk.payment_ref_no}</span>
-                        <span className="text-[10px] text-slate-500 uppercase">₱200.00 ({stk.payment_method})</span>
-                      </td>
-                      <td className="p-3.5">
-                        <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] border capitalize ${
-                          stk.status === 'approved' || stk.status === 'issued'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : stk.status === 'rejected'
-                              ? 'bg-red-50 text-red-700 border-red-200'
-                              : 'bg-amber-50 text-amber-700 border-amber-200'
-                        }`}>
-                          {stk.status}
-                        </span>
-                        {stk.sticker_number && (
-                          <span className="block text-[10px] font-mono text-umak-navy font-bold mt-1">
-                            {stk.sticker_number}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-3.5 text-right">
-                        {stk.status === 'pending' && (
-                          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                            <button
-                              onClick={() => handleAdminStatusUpdate(stk.id, 'approved', stk.vehicle_type)}
-                              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer inline-flex items-center gap-1.5"
-                            >
-                              <i className="fa-solid fa-check text-xs"></i> Approve & Issue
-                            </button>
-                            <button
-                              onClick={() => handleAdminStatusUpdate(stk.id, 'rejected', stk.vehicle_type)}
-                              className="px-3.5 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 border border-red-200"
-                            >
-                              <i className="fa-solid fa-xmark text-xs"></i> Reject
-                            </button>
-                          </div>
-                        )}
-                        {(stk.status === 'approved' || stk.status === 'issued') && (
-                          <span className="text-xs text-emerald-600 font-bold inline-flex items-center gap-1">
-                            <i className="fa-solid fa-circle-check"></i> Sticker Issued
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
         )}
