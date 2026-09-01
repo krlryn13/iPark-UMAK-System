@@ -79,6 +79,26 @@ app.get('/api/db-health', (req, res) => {
     });
 });
 
+// Diagnostic Email Test endpoint
+app.get('/api/email-test', async (req, res) => {
+    const toEmail = req.query.email || process.env.EMAIL_USER;
+    const { sendVerificationEmail } = require('./services/emailService');
+    try {
+        await sendVerificationEmail(toEmail, 'Test User', '123456');
+        res.json({
+            status: 'ok',
+            message: `Test email sent successfully to ${toEmail}! Check your inbox/spam folder.`
+        });
+    } catch (err) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to send email via SMTP',
+            error: err.message,
+            code: err.code
+        });
+    }
+});
+
 // Serve frontend static build in production (Single-Server Deployment)
 const frontendDist = path.join(__dirname, '../frontend/dist');
 if (require('fs').existsSync(frontendDist)) {
