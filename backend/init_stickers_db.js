@@ -22,7 +22,7 @@ async function initStickersDB() {
         amount DECIMAL(10,2) DEFAULT 200.00,
         payment_method VARCHAR(100) DEFAULT 'gcash',
         payment_ref_no VARCHAR(100) NOT NULL,
-        payment_status ENUM('paid', 'pending') DEFAULT 'paid',
+        payment_status ENUM('paid', 'pending', 'unpaid') DEFAULT 'pending',
         student_id_doc TEXT NULL,
         or_cr_doc TEXT NULL,
         license_doc TEXT NULL,
@@ -36,7 +36,7 @@ async function initStickersDB() {
     `);
 
     try {
-      await connection.query('ALTER TABLE vehicle_stickers MODIFY COLUMN payment_method VARCHAR(100) DEFAULT "gcash"');
+      await connection.query('ALTER TABLE vehicle_stickers MODIFY COLUMN payment_status ENUM("paid", "pending", "unpaid") DEFAULT "pending"');
     } catch (e) {}
     try {
       await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN student_id_doc TEXT NULL');

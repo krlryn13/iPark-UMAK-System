@@ -73,7 +73,7 @@ const applySticker = (req, res) => {
     amount: 200.00,
     payment_method: payment_method ? payment_method.toLowerCase() : 'gcash',
     payment_ref_no,
-    payment_status: payment_proof_doc ? 'paid' : 'unpaid',
+    payment_status: payment_proof_doc ? 'paid' : 'pending',
     student_id_doc,
     or_cr_doc,
     license_doc,
