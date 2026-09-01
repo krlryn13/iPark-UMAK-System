@@ -1,11 +1,18 @@
 const mysql = require('mysql2');
 require('dotenv').config();
 
+const user = process.env.DB_USER || process.env.MYSQLUSER || 'root';
+let password = process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '';
+
+if (user === 'root' && process.env.MYSQL_ROOT_PASSWORD) {
+    password = process.env.MYSQL_ROOT_PASSWORD;
+}
+
 const dbConfig = {
     host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
     port: (process.env.DB_PORT || process.env.MYSQLPORT) ? parseInt(process.env.DB_PORT || process.env.MYSQLPORT, 10) : 3306,
-    user: process.env.DB_USER || process.env.MYSQLUSER || 'root',
-    password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '',
+    user: user,
+    password: password,
     database: process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || 'ipark_umak',
     waitForConnections: true,
     connectionLimit: 10,

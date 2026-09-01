@@ -4,11 +4,17 @@ require('dotenv').config();
 
 async function initAuthDB() {
   try {
+    const dbUser = process.env.DB_USER || process.env.MYSQLUSER || 'root';
+    let dbPass = process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '';
+    if (dbUser === 'root' && process.env.MYSQL_ROOT_PASSWORD) {
+      dbPass = process.env.MYSQL_ROOT_PASSWORD;
+    }
+
     const connection = await mysql.createConnection({
       host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
       port: (process.env.DB_PORT || process.env.MYSQLPORT) ? parseInt(process.env.DB_PORT || process.env.MYSQLPORT, 10) : 3306,
-      user: process.env.DB_USER || process.env.MYSQLUSER || 'root',
-      password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '',
+      user: dbUser,
+      password: dbPass,
       database: process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || 'ipark_umak',
       ssl: (process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST.includes('aivencloud.com'))) ? { rejectUnauthorized: false } : undefined
     });
