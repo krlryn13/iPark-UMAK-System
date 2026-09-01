@@ -3,34 +3,63 @@ const nodemailer = require('nodemailer');
 const EMAIL_USER = (process.env.EMAIL_USER || 'iparkumak@gmail.com').trim();
 const EMAIL_PASS = (process.env.EMAIL_PASS || 'pwdqxkqkpqgyqadz').trim();
 
-// Reusable Nodemailer transporter for Gmail SMTP (Industry Standard Pattern)
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
-
 /**
- * Universal Email Sender via Nodemailer Gmail SMTP
+ * Universal Email Sender via Brevo HTTP REST API (Cloud) or Nodemailer (Localhost)
  */
 const sendMail = async (mailOptions) => {
-  console.log(`[EMAIL DISPATCH] Sending email to ${mailOptions.to} via ${EMAIL_USER}...`);
-  try {
-    const info = await transporter.sendMail({
-      ...mailOptions,
-      from: `"iPark UMAK System" <${EMAIL_USER}>`
-    });
-    console.log(`[EMAIL DELIVERED] Successfully sent to ${mailOptions.to}! MessageId: ${info.messageId}`);
-    return info;
-  } catch (err) {
-    console.error(`[EMAIL ERROR] Failed delivering to ${mailOptions.to}:`, err.message);
-    throw err;
+  const fetchApi = globalThis.fetch || fetch;
+  const brevoApiKey = process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.trim() : '';
+
+  // 1. Production Cloud Delivery via Brevo HTTPS REST API (Port 443 - Never blocked)
+  if (brevoApiKey) {
+    console.log(`[BREVO API DISPATCH] Sending email to ${mailOptions.to} via Brevo HTTP API...`);
+    try {
+      const response = await fetchApi('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'api-key': brevoApiKey,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'iPark UMAK System', email: EMAIL_USER },
+          to: [{ email: mailOptions.to }],
+          subject: mailOptions.subject,
+          htmlContent: mailOptions.html
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        console.log(`[BREVO SUCCESS] Email delivered to ${mailOptions.to}! MessageID:`, data.messageId);
+        return data;
+      } else {
+        console.error(`[BREVO API ERROR] Status ${response.status}:`, data);
+      }
+    } catch (bErr) {
+      console.error(`[BREVO DISPATCH ERROR]:`, bErr.message);
+    }
   }
+
+  // 2. Localhost Delivery via Nodemailer Gmail SMTP
+  console.log(`[SMTP DISPATCH] Sending email to ${mailOptions.to} via Gmail SMTP (${EMAIL_USER})...`);
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: EMAIL_USER,
+      pass: EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+
+  const info = await transporter.sendMail({
+    ...mailOptions,
+    from: `"iPark UMAK System" <${EMAIL_USER}>`
+  });
+  console.log(`[SMTP SUCCESS] Delivered to ${mailOptions.to}! MessageId: ${info.messageId}`);
+  return info;
 };
 
 /**
