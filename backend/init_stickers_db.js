@@ -37,6 +37,10 @@ async function initStickersDB() {
         payment_method VARCHAR(100) DEFAULT 'gcash',
         payment_ref_no VARCHAR(100) NOT NULL,
         payment_status ENUM('paid', 'pending') DEFAULT 'paid',
+        student_id_doc TEXT NULL,
+        or_cr_doc TEXT NULL,
+        license_doc TEXT NULL,
+        payment_proof_doc TEXT NULL,
         sticker_number VARCHAR(100) DEFAULT NULL,
         status ENUM('pending', 'approved', 'rejected', 'issued') DEFAULT 'pending',
         admin_remarks TEXT,
@@ -48,9 +52,20 @@ async function initStickersDB() {
     try {
       await connection.query('ALTER TABLE vehicle_stickers MODIFY COLUMN payment_method VARCHAR(100) DEFAULT "gcash"');
     } catch (e) {}
-    `);
+    try {
+      await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN student_id_doc TEXT NULL');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN or_cr_doc TEXT NULL');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN license_doc TEXT NULL');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN payment_proof_doc TEXT NULL');
+    } catch (e) {}
 
-    console.log('✓ vehicle_stickers table created successfully!');
+    console.log('✓ vehicle_stickers table created & verified successfully!');
     await connection.end();
   } catch (err) {
     console.error('Error initializing Vehicle Stickers DB:', err.message);
