@@ -34,7 +34,7 @@ async function initStickersDB() {
         cr_number VARCHAR(100) NOT NULL,
         license_number VARCHAR(100) NOT NULL,
         amount DECIMAL(10,2) DEFAULT 200.00,
-        payment_method ENUM('gcash', 'maya', 'card') NOT NULL,
+        payment_method VARCHAR(100) DEFAULT 'gcash',
         payment_ref_no VARCHAR(100) NOT NULL,
         payment_status ENUM('paid', 'pending') DEFAULT 'paid',
         sticker_number VARCHAR(100) DEFAULT NULL,
@@ -42,7 +42,12 @@ async function initStickersDB() {
         admin_remarks TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    try {
+      await connection.query('ALTER TABLE vehicle_stickers MODIFY COLUMN payment_method VARCHAR(100) DEFAULT "gcash"');
+    } catch (e) {}
     `);
 
     console.log('✓ vehicle_stickers table created successfully!');

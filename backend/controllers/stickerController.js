@@ -71,7 +71,7 @@ const applySticker = (req, res) => {
     cr_number: cr_number || 'CR-PENDING',
     license_number: license_number || 'LIC-PENDING',
     amount: 200.00,
-    payment_method: payment_method || 'PayMongo API',
+    payment_method: payment_method ? payment_method.toLowerCase() : 'gcash',
     payment_ref_no,
     payment_status: payment_proof_doc ? 'paid' : 'unpaid',
     student_id_doc,
