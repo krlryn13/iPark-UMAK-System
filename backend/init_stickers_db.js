@@ -46,4 +46,8 @@ async function initStickersDB() {
   }
 }
 
-initStickersDB();
+module.exports = { initStickersDB };
+
+if (require.main === module) {
+    initStickersDB();
+}

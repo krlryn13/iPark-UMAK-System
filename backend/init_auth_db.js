@@ -86,4 +86,8 @@ async function initAuthDB() {
   }
 }
 
-initAuthDB();
+module.exports = { initAuthDB };
+
+if (require.main === module) {
+    initAuthDB();
+}

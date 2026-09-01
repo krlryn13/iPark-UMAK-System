@@ -120,6 +120,20 @@ if (require('fs').existsSync(frontendDist)) {
     });
 }
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+app.listen(PORT, async () => {
+    console.log(`iPark UMAK Backend Server is running on port ${PORT}`);
+    try {
+        const { initAuthDB } = require('./init_auth_db');
+        const { initGuestDB } = require('./init_guest_db');
+        const { initStickersDB } = require('./init_stickers_db');
+        const { seedHPSB } = require('./seed_hpsb');
+        
+        await initAuthDB();
+        await initGuestDB();
+        await initStickersDB();
+        await seedHPSB();
+        console.log('✓ Automatic Cloud DB Table Initialization & Seeding Completed!');
+    } catch (dbInitErr) {
+        console.error('[DB AUTO INIT ERROR]', dbInitErr.message);
+    }
 });

@@ -105,4 +105,8 @@ async function seedHPSB() {
   }
 }
 
-seedHPSB();
+module.exports = { seedHPSB };
+
+if (require.main === module) {
+    seedHPSB();
+}

@@ -46,4 +46,8 @@ async function initGuestDB() {
   }
 }
 
-initGuestDB();
+module.exports = { initGuestDB };
+
+if (require.main === module) {
+    initGuestDB();
+}
