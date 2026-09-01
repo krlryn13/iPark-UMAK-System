@@ -34,8 +34,11 @@ const handleServerError = (res, err, customMessage = 'A server error occurred. P
         }
     }
 
-    // 3. Return sanitized, human-readable error response
-    return res.status(500).json({ error: customMessage });
+    // 3. Return sanitized, human-readable error response with error details
+    return res.status(500).json({ 
+        error: customMessage,
+        details: err?.message || String(err)
+    });
 };
 
 module.exports = { handleServerError };

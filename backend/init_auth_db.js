@@ -1,25 +1,11 @@
-const mysql = require('mysql2/promise');
+const db = require('./config/db');
 const bcrypt = require('bcryptjs');
-require('dotenv').config();
 
 async function initAuthDB() {
   try {
-    const dbUser = process.env.MYSQLUSER || process.env.DB_USER || 'root';
-    let dbPass = process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || process.env.MYSQL_ROOT_PASSWORD || '';
-    if (dbUser === 'root' && process.env.MYSQL_ROOT_PASSWORD && !process.env.MYSQLPASSWORD) {
-      dbPass = process.env.MYSQL_ROOT_PASSWORD;
-    }
+    const connection = db.promise ? db.promise() : db;
 
-    const connection = await mysql.createConnection({
-      host: process.env.MYSQLHOST || process.env.DB_HOST || 'localhost',
-      port: (process.env.MYSQLPORT || process.env.DB_PORT) ? parseInt(process.env.MYSQLPORT || process.env.DB_PORT, 10) : 3306,
-      user: dbUser,
-      password: dbPass,
-      database: process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || process.env.DB_NAME || 'ipark_umak',
-      ssl: (process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST.includes('aivencloud.com'))) ? { rejectUnauthorized: false } : undefined
-    });
-
-    console.log('Connected to MySQL. Setting up users table for authentication and verification...');
+    console.log('Setting up users table for authentication and verification...');
 
     // Create users table
     await connection.query(`
@@ -85,7 +71,6 @@ async function initAuthDB() {
       console.log('✓ Added payment_proof_doc column to vehicle_stickers table.');
     } catch (e) {}
 
-    await connection.end();
     console.log('Auth Verification Database Setup Complete!');
   } catch (err) {
     console.error('Error initializing Auth DB:', err.message);

@@ -1,24 +1,10 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+const db = require('./config/db');
 
 async function initStickersDB() {
   try {
-    const dbUser = process.env.MYSQLUSER || process.env.DB_USER || 'root';
-    let dbPass = process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || process.env.MYSQL_ROOT_PASSWORD || '';
-    if (dbUser === 'root' && process.env.MYSQL_ROOT_PASSWORD && !process.env.MYSQLPASSWORD) {
-      dbPass = process.env.MYSQL_ROOT_PASSWORD;
-    }
+    const connection = db.promise ? db.promise() : db;
 
-    const connection = await mysql.createConnection({
-      host: process.env.MYSQLHOST || process.env.DB_HOST || 'localhost',
-      port: (process.env.MYSQLPORT || process.env.DB_PORT) ? parseInt(process.env.MYSQLPORT || process.env.DB_PORT, 10) : 3306,
-      user: dbUser,
-      password: dbPass,
-      database: process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || process.env.DB_NAME || 'ipark_umak',
-      ssl: (process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST.includes('aivencloud.com'))) ? { rejectUnauthorized: false } : undefined
-    });
-
-    console.log('Connected to MySQL. Initializing vehicle_stickers table...');
+    console.log('Initializing vehicle_stickers table...');
 
     await connection.query(`
       CREATE TABLE IF NOT EXISTS vehicle_stickers (
@@ -66,7 +52,6 @@ async function initStickersDB() {
     } catch (e) {}
 
     console.log('✓ vehicle_stickers table created & verified successfully!');
-    await connection.end();
   } catch (err) {
     console.error('Error initializing Vehicle Stickers DB:', err.message);
   }

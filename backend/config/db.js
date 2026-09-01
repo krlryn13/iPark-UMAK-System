@@ -39,14 +39,22 @@ db.getConnection((err, connection) => {
     connection.release();
 
     // Auto-create database tables on cloud startup if needed
-    try {
-        require('../init_auth_db');
-        require('../init_guest_db');
-        require('../init_stickers_db');
-        require('../seed_hpsb');
-    } catch (initErr) {
-        console.warn('[DB AUTO-INIT WARNING]', initErr.message);
-    }
+    (async () => {
+        try {
+            const { initAuthDB } = require('../init_auth_db');
+            const { initGuestDB } = require('../init_guest_db');
+            const { initStickersDB } = require('../init_stickers_db');
+            const { seedHPSB } = require('../seed_hpsb');
+            
+            if (typeof initAuthDB === 'function') await initAuthDB();
+            if (typeof initGuestDB === 'function') await initGuestDB();
+            if (typeof initStickersDB === 'function') await initStickersDB();
+            if (typeof seedHPSB === 'function') await seedHPSB();
+            console.log('✓ Database tables auto-initialized & verified!');
+        } catch (initErr) {
+            console.warn('[DB AUTO-INIT WARNING]', initErr.message);
+        }
+    })();
 });
 
 module.exports = db;
