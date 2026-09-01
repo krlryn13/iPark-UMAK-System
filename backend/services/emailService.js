@@ -8,10 +8,10 @@ const sendMailHTTP = async (mailOptions) => {
   const resendApiKey = process.env.RESEND_API_KEY;
 
   if (resendApiKey) {
-    const fetch = (await import('node-fetch')).default || global.fetch;
+    const fetchApi = globalThis.fetch || fetch;
     const fromSender = process.env.RESEND_FROM || 'onboarding@resend.dev';
     
-    const response = await fetch('https://api.resend.com/emails', {
+    const response = await fetchApi('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${resendApiKey}`,
