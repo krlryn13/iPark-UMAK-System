@@ -1,16 +1,42 @@
 const nodemailer = require('nodemailer');
 
 /**
- * Send email via Resend HTTP REST API (Port 443 HTTPS - Never blocked by Render)
+ * Send email via Brevo / Resend HTTP REST API (Port 443 HTTPS - Never blocked by Render)
  * or fallback to Nodemailer SMTP
  */
 const sendMailHTTP = async (mailOptions) => {
+  const fetchApi = globalThis.fetch || fetch;
+  const brevoApiKey = process.env.BREVO_API_KEY;
   const resendApiKey = process.env.RESEND_API_KEY;
 
+  // 1. Try Brevo HTTP API (Allows any sender email e.g. iparkumak@gmail.com & any recipient!)
+  if (brevoApiKey) {
+    const response = await fetchApi('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': brevoApiKey,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: { name: 'iPark UMAK System', email: process.env.EMAIL_USER || 'iparkumak@gmail.com' },
+        to: [{ email: mailOptions.to }],
+        subject: mailOptions.subject,
+        htmlContent: mailOptions.html
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || JSON.stringify(data));
+    }
+    console.log(`[BREVO EMAIL SENT] Email sent to ${mailOptions.to} via HTTPS API!`);
+    return data;
+  }
+
+  // 2. Try Resend HTTP API
   if (resendApiKey) {
-    const fetchApi = globalThis.fetch || fetch;
     const fromSender = process.env.RESEND_FROM || 'onboarding@resend.dev';
-    
     const response = await fetchApi('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -28,13 +54,13 @@ const sendMailHTTP = async (mailOptions) => {
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'Resend API error');
+      throw new Error(data.message || JSON.stringify(data));
     }
     console.log(`[RESEND EMAIL SENT] Email sent to ${mailOptions.to} via HTTPS API!`);
     return data;
   }
 
-  // Fallback to Nodemailer SMTP
+  // 3. Fallback to Nodemailer SMTP
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
