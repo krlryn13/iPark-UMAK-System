@@ -93,8 +93,13 @@ app.get('/api/email-test', async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to send email via SMTP',
-            error: err.message,
-            code: err.code
+            errorMessage: err?.message,
+            errorCode: err?.code,
+            errorCommand: err?.command,
+            errorResponse: err?.response,
+            errorStack: err?.stack,
+            emailUser: process.env.EMAIL_USER ? `${process.env.EMAIL_USER.slice(0, 4)}...` : 'NOT_SET',
+            emailPassLength: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0
         });
     }
 });
