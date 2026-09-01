@@ -9,7 +9,7 @@ const sendMailHTTP = async (mailOptions) => {
 
   if (resendApiKey) {
     const fetch = (await import('node-fetch')).default || global.fetch;
-    const fromSender = process.env.RESEND_FROM || 'iPark UMAK <onboarding@resend.dev>';
+    const fromSender = process.env.RESEND_FROM || 'onboarding@resend.dev';
     
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
