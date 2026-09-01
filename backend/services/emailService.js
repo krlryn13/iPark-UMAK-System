@@ -1,84 +1,99 @@
 const nodemailer = require('nodemailer');
 
+const DEFAULT_EMAIL_USER = 'iparkumak@gmail.com';
+const DEFAULT_EMAIL_PASS = 'pwdqxkqkpqgyqadz';
+
 /**
- * Send email via Brevo / Resend HTTP REST API (Port 443 HTTPS - Never blocked by Render)
- * or fallback to Nodemailer SMTP
+ * Send email via Nodemailer Gmail SMTP or HTTP REST API
  */
 const sendMailHTTP = async (mailOptions) => {
   const fetchApi = globalThis.fetch || fetch;
   const brevoApiKey = process.env.BREVO_API_KEY;
   const resendApiKey = process.env.RESEND_API_KEY;
 
-  // 1. Try Brevo HTTP API (Allows any sender email e.g. iparkumak@gmail.com & any recipient!)
+  // 1. Try Brevo HTTP API
   if (brevoApiKey) {
-    const response = await fetchApi('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'accept': 'application/json',
-        'api-key': brevoApiKey,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        sender: { name: 'iPark UMAK System', email: process.env.EMAIL_USER || 'iparkumak@gmail.com' },
-        to: [{ email: mailOptions.to }],
-        subject: mailOptions.subject,
-        htmlContent: mailOptions.html
-      })
-    });
+    try {
+      const response = await fetchApi('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'api-key': brevoApiKey,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'iPark UMAK System', email: process.env.EMAIL_USER || DEFAULT_EMAIL_USER },
+          to: [{ email: mailOptions.to }],
+          subject: mailOptions.subject,
+          htmlContent: mailOptions.html
+        })
+      });
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || JSON.stringify(data));
+      const data = await response.json();
+      if (response.ok) {
+        console.log(`[BREVO EMAIL SUCCESS] Sent to ${mailOptions.to}!`);
+        return data;
+      }
+      console.warn('[BREVO API WARN]', data);
+    } catch (bErr) {
+      console.error('[BREVO API ERR]', bErr.message);
     }
-    console.log(`[BREVO EMAIL SENT] Email sent to ${mailOptions.to} via HTTPS API!`);
-    return data;
   }
 
   // 2. Try Resend HTTP API
   if (resendApiKey) {
-    const fromSender = process.env.RESEND_FROM || 'onboarding@resend.dev';
-    const response = await fetchApi('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: fromSender,
-        to: Array.isArray(mailOptions.to) ? mailOptions.to : [mailOptions.to],
-        subject: mailOptions.subject,
-        html: mailOptions.html,
-        text: mailOptions.text
-      })
-    });
+    try {
+      const fromSender = process.env.RESEND_FROM || 'onboarding@resend.dev';
+      const response = await fetchApi('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: fromSender,
+          to: Array.isArray(mailOptions.to) ? mailOptions.to : [mailOptions.to],
+          subject: mailOptions.subject,
+          html: mailOptions.html,
+          text: mailOptions.text
+        })
+      });
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || JSON.stringify(data));
+      const data = await response.json();
+      if (response.ok) {
+        console.log(`[RESEND EMAIL SUCCESS] Sent to ${mailOptions.to}!`);
+        return data;
+      }
+      console.warn('[RESEND API WARN]', data);
+    } catch (rErr) {
+      console.error('[RESEND API ERR]', rErr.message);
     }
-    console.log(`[RESEND EMAIL SENT] Email sent to ${mailOptions.to} via HTTPS API!`);
-    return data;
   }
 
-  // 3. Fallback to Nodemailer SMTP
+  // 3. Direct Gmail SMTP via Nodemailer (Guaranteed fallback with hardcoded Gmail credentials)
+  const emailUser = (process.env.EMAIL_USER || DEFAULT_EMAIL_USER).trim();
+  const emailPass = (process.env.EMAIL_PASS || DEFAULT_EMAIL_PASS).trim();
+
+  console.log(`[SMTP START] Attempting Gmail SMTP send to ${mailOptions.to} via ${emailUser}...`);
+
   const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    family: 4,
+    service: 'gmail',
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
+      user: emailUser,
+      pass: emailPass
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
     tls: {
       rejectUnauthorized: false
     }
   });
 
-  return transporter.sendMail(mailOptions);
+  const result = await transporter.sendMail({
+    ...mailOptions,
+    from: `"iPark UMAK System" <${emailUser}>`
+  });
+
+  console.log(`[SMTP SUCCESS] Email delivered to ${mailOptions.to}! MessageId: ${result.messageId}`);
+  return result;
 };
 
 /**
@@ -86,8 +101,6 @@ const sendMailHTTP = async (mailOptions) => {
  */
 const sendVerificationEmail = async (toEmail, name, code) => {
   const mailOptions = {
-    from: `"iPark UMAK" <${process.env.EMAIL_USER || 'iparkumak@gmail.com'}>`,
-    replyTo: process.env.EMAIL_USER || 'iparkumak@gmail.com',
     to: toEmail,
     subject: 'iPark UMAK — Account Verification Code',
     text: `Hi ${name},\n\nYour iPark UMAK one-time verification code is: ${code}\n\nThis code expires in 15 minutes.\n\nThank you,\nUniversity of Makati - iPark UMAK System`,
@@ -162,7 +175,6 @@ const sendGuestPassEmail = async (toEmail, guestName, passCode, eventName, event
   const formattedDate = formatDateClean(eventDate);
   const parkingFloor = preferredLevel || 'HPSB Level 2';
   const mailOptions = {
-    from: `"iPark UMAK - OHSO" <${process.env.EMAIL_USER || 'iparkumak@gmail.com'}>`,
     to: toEmail,
     subject: `UMak Visitor Parking E-Pass Confirmation — ${passCode}`,
     html: `<h2>UMak Visitor Parking E-Pass</h2><p>Pass Code: <strong>${passCode}</strong></p><p>Floor: ${parkingFloor}</p><p>Date: ${formattedDate}</p>`
@@ -173,7 +185,6 @@ const sendGuestPassEmail = async (toEmail, guestName, passCode, eventName, event
 const sendStickerStatusEmail = async (toEmail, applicantName, status, stickerNumber, vehicleType, plateNumber) => {
   const isApproved = status === 'approved' || status === 'issued';
   const mailOptions = {
-    from: `"iPark UMAK - OHSO" <${process.env.EMAIL_USER || 'iparkumak@gmail.com'}>`,
     to: toEmail,
     subject: `UMak Vehicle Sticker ${isApproved ? 'APPROVED' : status.toUpperCase()} — ${stickerNumber || plateNumber}`,
     html: `<h2>Sticker Application ${status.toUpperCase()}</h2><p>Sticker No: <strong>${stickerNumber || 'N/A'}</strong></p>`
@@ -183,7 +194,6 @@ const sendStickerStatusEmail = async (toEmail, applicantName, status, stickerNum
 
 const sendGuestPassStatusEmail = async (toEmail, guestName, status, passCode, eventName, eventDate, timeStart, timeEnd, venue, plateNumber, vehicleDetails) => {
   const mailOptions = {
-    from: `"iPark UMAK - OHSO" <${process.env.EMAIL_USER || 'iparkumak@gmail.com'}>`,
     to: toEmail,
     subject: `UMak Visitor Pass Status: ${status.toUpperCase()} — ${passCode}`,
     html: `<h2>Visitor Pass ${status.toUpperCase()}</h2><p>Pass Code: <strong>${passCode}</strong></p>`
@@ -193,7 +203,6 @@ const sendGuestPassStatusEmail = async (toEmail, guestName, status, passCode, ev
 
 const sendAccountUnlockedEmail = async (toEmail, userName) => {
   const mailOptions = {
-    from: `"iPark UMAK - OHSO" <${process.env.EMAIL_USER || 'iparkumak@gmail.com'}>`,
     to: toEmail,
     subject: `iPark UMAK — Account Unlocked Notice`,
     html: `<h2>Account Unlocked</h2><p>Your account ${toEmail} has been unlocked by OHSO Admin.</p>`
@@ -203,7 +212,6 @@ const sendAccountUnlockedEmail = async (toEmail, userName) => {
 
 const sendPasswordResetEmail = async (toEmail, name, otp) => {
   const mailOptions = {
-    from: `"iPark UMAK" <${process.env.EMAIL_USER || 'iparkumak@gmail.com'}>`,
     to: toEmail,
     subject: 'iPark UMAK — Password Reset Verification Code',
     html: `<h2>Password Reset</h2><p>OTP: <strong>${otp}</strong></p>`
