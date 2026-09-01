@@ -1,103 +1,40 @@
 const nodemailer = require('nodemailer');
 
-const DEFAULT_EMAIL_USER = 'iparkumak@gmail.com';
-const DEFAULT_EMAIL_PASS = 'pwdqxkqkpqgyqadz';
+const EMAIL_USER = (process.env.EMAIL_USER || 'iparkumak@gmail.com').trim();
+const EMAIL_PASS = (process.env.EMAIL_PASS || 'pwdqxkqkpqgyqadz').trim();
+
+// Reusable Nodemailer transporter for Gmail SMTP (Industry Standard Pattern)
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: EMAIL_USER,
+    pass: EMAIL_PASS
+  },
+  tls: {
+    rejectUnauthorized: false
+  }
+});
 
 /**
- * Send email via Nodemailer Gmail SMTP or HTTP REST API
+ * Universal Email Sender via Nodemailer Gmail SMTP
  */
-const sendMailHTTP = async (mailOptions) => {
-  const fetchApi = globalThis.fetch || fetch;
-  const brevoApiKey = process.env.BREVO_API_KEY;
-  const resendApiKey = process.env.RESEND_API_KEY;
-
-  // 1. Try Brevo HTTP API
-  if (brevoApiKey) {
-    try {
-      const response = await fetchApi('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'api-key': brevoApiKey,
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-          sender: { name: 'iPark UMAK System', email: process.env.EMAIL_USER || DEFAULT_EMAIL_USER },
-          to: [{ email: mailOptions.to }],
-          subject: mailOptions.subject,
-          htmlContent: mailOptions.html
-        })
-      });
-
-      const data = await response.json();
-      if (response.ok) {
-        console.log(`[BREVO EMAIL SUCCESS] Sent to ${mailOptions.to}!`);
-        return data;
-      }
-      console.warn('[BREVO API WARN]', data);
-    } catch (bErr) {
-      console.error('[BREVO API ERR]', bErr.message);
-    }
+const sendMail = async (mailOptions) => {
+  console.log(`[EMAIL DISPATCH] Sending email to ${mailOptions.to} via ${EMAIL_USER}...`);
+  try {
+    const info = await transporter.sendMail({
+      ...mailOptions,
+      from: `"iPark UMAK System" <${EMAIL_USER}>`
+    });
+    console.log(`[EMAIL DELIVERED] Successfully sent to ${mailOptions.to}! MessageId: ${info.messageId}`);
+    return info;
+  } catch (err) {
+    console.error(`[EMAIL ERROR] Failed delivering to ${mailOptions.to}:`, err.message);
+    throw err;
   }
-
-  // 2. Try Resend HTTP API
-  if (resendApiKey) {
-    try {
-      const fromSender = process.env.RESEND_FROM || 'onboarding@resend.dev';
-      const response = await fetchApi('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: fromSender,
-          to: Array.isArray(mailOptions.to) ? mailOptions.to : [mailOptions.to],
-          subject: mailOptions.subject,
-          html: mailOptions.html,
-          text: mailOptions.text
-        })
-      });
-
-      const data = await response.json();
-      if (response.ok) {
-        console.log(`[RESEND EMAIL SUCCESS] Sent to ${mailOptions.to}!`);
-        return data;
-      }
-      console.warn('[RESEND API WARN]', data);
-    } catch (rErr) {
-      console.error('[RESEND API ERR]', rErr.message);
-    }
-  }
-
-  // 3. Direct Gmail SMTP via Nodemailer (Guaranteed fallback with hardcoded Gmail credentials)
-  const emailUser = (process.env.EMAIL_USER || DEFAULT_EMAIL_USER).trim();
-  const emailPass = (process.env.EMAIL_PASS || DEFAULT_EMAIL_PASS).trim();
-
-  console.log(`[SMTP START] Attempting Gmail SMTP send to ${mailOptions.to} via ${emailUser}...`);
-
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: emailUser,
-      pass: emailPass
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
-
-  const result = await transporter.sendMail({
-    ...mailOptions,
-    from: `"iPark UMAK System" <${emailUser}>`
-  });
-
-  console.log(`[SMTP SUCCESS] Email delivered to ${mailOptions.to}! MessageId: ${result.messageId}`);
-  return result;
 };
 
 /**
- * Sends a 6-digit verification code email to the new user.
+ * Sends a 6-digit verification code email to new user.
  */
 const sendVerificationEmail = async (toEmail, name, code) => {
   const mailOptions = {
@@ -147,7 +84,7 @@ const sendVerificationEmail = async (toEmail, name, code) => {
     `
   };
 
-  return sendMailHTTP(mailOptions);
+  return sendMail(mailOptions);
 };
 
 const formatDateClean = (rawDate) => {
@@ -179,7 +116,7 @@ const sendGuestPassEmail = async (toEmail, guestName, passCode, eventName, event
     subject: `UMak Visitor Parking E-Pass Confirmation — ${passCode}`,
     html: `<h2>UMak Visitor Parking E-Pass</h2><p>Pass Code: <strong>${passCode}</strong></p><p>Floor: ${parkingFloor}</p><p>Date: ${formattedDate}</p>`
   };
-  return sendMailHTTP(mailOptions);
+  return sendMail(mailOptions);
 };
 
 const sendStickerStatusEmail = async (toEmail, applicantName, status, stickerNumber, vehicleType, plateNumber) => {
@@ -189,7 +126,7 @@ const sendStickerStatusEmail = async (toEmail, applicantName, status, stickerNum
     subject: `UMak Vehicle Sticker ${isApproved ? 'APPROVED' : status.toUpperCase()} — ${stickerNumber || plateNumber}`,
     html: `<h2>Sticker Application ${status.toUpperCase()}</h2><p>Sticker No: <strong>${stickerNumber || 'N/A'}</strong></p>`
   };
-  return sendMailHTTP(mailOptions);
+  return sendMail(mailOptions);
 };
 
 const sendGuestPassStatusEmail = async (toEmail, guestName, status, passCode, eventName, eventDate, timeStart, timeEnd, venue, plateNumber, vehicleDetails) => {
@@ -198,7 +135,7 @@ const sendGuestPassStatusEmail = async (toEmail, guestName, status, passCode, ev
     subject: `UMak Visitor Pass Status: ${status.toUpperCase()} — ${passCode}`,
     html: `<h2>Visitor Pass ${status.toUpperCase()}</h2><p>Pass Code: <strong>${passCode}</strong></p>`
   };
-  return sendMailHTTP(mailOptions);
+  return sendMail(mailOptions);
 };
 
 const sendAccountUnlockedEmail = async (toEmail, userName) => {
@@ -207,7 +144,7 @@ const sendAccountUnlockedEmail = async (toEmail, userName) => {
     subject: `iPark UMAK — Account Unlocked Notice`,
     html: `<h2>Account Unlocked</h2><p>Your account ${toEmail} has been unlocked by OHSO Admin.</p>`
   };
-  return sendMailHTTP(mailOptions);
+  return sendMail(mailOptions);
 };
 
 const sendPasswordResetEmail = async (toEmail, name, otp) => {
@@ -216,7 +153,7 @@ const sendPasswordResetEmail = async (toEmail, name, otp) => {
     subject: 'iPark UMAK — Password Reset Verification Code',
     html: `<h2>Password Reset</h2><p>OTP: <strong>${otp}</strong></p>`
   };
-  return sendMailHTTP(mailOptions);
+  return sendMail(mailOptions);
 };
 
 module.exports = {
