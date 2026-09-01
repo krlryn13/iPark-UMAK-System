@@ -101,11 +101,10 @@ const register = (req, res) => {
             }, async (err, result) => {
                 if (err) return handleServerError(res, err, 'Account creation failed. Email address may already be registered.');
 
-                try {
-                    await sendVerificationEmail(cleanEmail, name.trim(), vCode);
-                } catch (mailErr) {
+                // Send email asynchronously in background so client response is instant
+                sendVerificationEmail(cleanEmail, name.trim(), vCode).catch(mailErr => {
                     console.error('[EMAIL ERROR]', mailErr.message);
-                }
+                });
 
                 res.status(201).json({
                     message: `A 6-digit verification code has been sent to ${cleanEmail}. Please check your inbox.`,
