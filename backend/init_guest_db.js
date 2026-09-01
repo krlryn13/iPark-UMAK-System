@@ -3,18 +3,18 @@ require('dotenv').config();
 
 async function initGuestDB() {
   try {
-    const dbUser = process.env.DB_USER || process.env.MYSQLUSER || 'root';
-    let dbPass = process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '';
-    if (dbUser === 'root' && process.env.MYSQL_ROOT_PASSWORD) {
+    const dbUser = process.env.MYSQLUSER || process.env.DB_USER || 'root';
+    let dbPass = process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || process.env.MYSQL_ROOT_PASSWORD || '';
+    if (dbUser === 'root' && process.env.MYSQL_ROOT_PASSWORD && !process.env.MYSQLPASSWORD) {
       dbPass = process.env.MYSQL_ROOT_PASSWORD;
     }
 
     const connection = await mysql.createConnection({
-      host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
-      port: (process.env.DB_PORT || process.env.MYSQLPORT) ? parseInt(process.env.DB_PORT || process.env.MYSQLPORT, 10) : 3306,
+      host: process.env.MYSQLHOST || process.env.DB_HOST || 'localhost',
+      port: (process.env.MYSQLPORT || process.env.DB_PORT) ? parseInt(process.env.MYSQLPORT || process.env.DB_PORT, 10) : 3306,
       user: dbUser,
       password: dbPass,
-      database: process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || 'ipark_umak',
+      database: process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || process.env.DB_NAME || 'ipark_umak',
       ssl: (process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST.includes('aivencloud.com'))) ? { rejectUnauthorized: false } : undefined
     });
 

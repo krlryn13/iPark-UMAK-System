@@ -1,19 +1,20 @@
 const mysql = require('mysql2');
 require('dotenv').config();
 
-const user = process.env.DB_USER || process.env.MYSQLUSER || 'root';
-let password = process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || process.env.MYSQL_ROOT_PASSWORD || '';
+// Resolve Railway / standard environment variables (Prefer Railway's MYSQLUSER and MYSQLPASSWORD)
+const user = process.env.MYSQLUSER || process.env.DB_USER || 'root';
+let password = process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || process.env.MYSQL_ROOT_PASSWORD || '';
 
-if (user === 'root' && process.env.MYSQL_ROOT_PASSWORD) {
+if (user === 'root' && process.env.MYSQL_ROOT_PASSWORD && !process.env.MYSQLPASSWORD) {
     password = process.env.MYSQL_ROOT_PASSWORD;
 }
 
 const dbConfig = {
-    host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
-    port: (process.env.DB_PORT || process.env.MYSQLPORT) ? parseInt(process.env.DB_PORT || process.env.MYSQLPORT, 10) : 3306,
+    host: process.env.MYSQLHOST || process.env.DB_HOST || 'localhost',
+    port: (process.env.MYSQLPORT || process.env.DB_PORT) ? parseInt(process.env.MYSQLPORT || process.env.DB_PORT, 10) : 3306,
     user: user,
     password: password,
-    database: process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || 'ipark_umak',
+    database: process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE || process.env.DB_NAME || 'ipark_umak',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
