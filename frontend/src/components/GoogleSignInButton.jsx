@@ -40,6 +40,8 @@ export default function GoogleSignInButton({ onGoogleSuccess, onError, loading, 
               const profile = await profileRes.json();
               
               onGoogleSuccess({
+                token: tokenResponse.access_token,
+                idToken: tokenResponse.id_token || null,
                 user: {
                   email: profile.email,
                   name: profile.name || profile.given_name || profile.email.split('@')[0]

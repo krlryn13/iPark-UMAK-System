@@ -16,7 +16,7 @@ export default function ForgotPasswordModal({ isOpen, onClose, onSwitchToLogin }
   if (!isOpen) return null;
 
   // Password rules validation
-  const hasMinLength = newPassword.length >= 8;
+  const hasMinLength = newPassword.length >= 12;
   const hasUpper = /[A-Z]/.test(newPassword);
   const hasLower = /[a-z]/.test(newPassword);
   const hasNumber = /[0-9]/.test(newPassword);
@@ -301,7 +301,7 @@ export default function ForgotPasswordModal({ isOpen, onClose, onSwitchToLogin }
               {/* Real-time Password Rules Feedback */}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-[11px] font-medium">
                 <div className={hasMinLength ? 'text-emerald-600' : 'text-slate-400'}>
-                  <i className={`fa-solid ${hasMinLength ? 'fa-check' : 'fa-circle-dot'} text-[10px] mr-1.5`}></i> At least 8 characters
+                  <i className={`fa-solid ${hasMinLength ? 'fa-check' : 'fa-circle-dot'} text-[10px] mr-1.5`}></i> At least 12 characters
                 </div>
                 <div className={hasUpper ? 'text-emerald-600' : 'text-slate-400'}>
                   <i className={`fa-solid ${hasUpper ? 'fa-check' : 'fa-circle-dot'} text-[10px] mr-1.5`}></i> At least 1 uppercase letter (A-Z)

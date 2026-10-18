@@ -9,6 +9,7 @@ import { StickerApplicationModal } from '../components/StickerApplicationModal';
 import { DocumentInspectorModal } from '../components/DocumentInspectorModal';
 import { GuestReservationModal } from '../components/GuestReservationModal';
 import LocationTutorialModal from '../components/LocationTutorialModal';
+import StatusBadge from '../components/StatusBadge';
 import { useParkingData } from '../hooks/useParkingData';
 import { API_BASE_URL } from '../config/api';
 
@@ -58,7 +59,7 @@ export const Dashboard = () => {
         const data = await res.json();
         setUserStickers(data);
       }
-    } catch (e) {}
+    } catch (e) { }
     setLoadingStickers(false);
   };
 
@@ -71,7 +72,7 @@ export const Dashboard = () => {
         const data = await res.json();
         setAdminStickers(data);
       }
-    } catch (e) {}
+    } catch (e) { }
   };
 
   useEffect(() => {
@@ -83,10 +84,42 @@ export const Dashboard = () => {
       }
     }
 
-    // Auto-open sticker modal if returning from PayMongo redirect
+    // Handle PayMongo Checkout return redirect
     const params = new URLSearchParams(window.location.search);
-    if (params.get('payment') === 'success') {
+    const paymentAction = params.get('payment');
+
+    if (paymentAction === 'return') {
+      const ref = params.get('ref');
+      // 1. Broadcast to main tab
+      try {
+        const bc = new BroadcastChannel('ipark_paymongo_payment');
+        bc.postMessage({ type: 'PAYMENT_RETURN', ref, time: Date.now() });
+        bc.close();
+      } catch (e) { }
+
+      // 2. PostMessage to opener if available
+      if (window.opener && !window.opener.closed) {
+        try {
+          window.opener.postMessage({ type: 'PAYMONGO_PAYMENT_RETURN', ref }, '*');
+        } catch (e) { }
+      }
+
+      // 3. Fallback localStorage trigger
+      localStorage.setItem('ipark_paymongo_return_trigger', JSON.stringify({ ref, time: Date.now() }));
+
+      // 4. Close this tab so user returns seamlessly to the main window
+      window.close();
+
+      // If browser security blocks window.close(), redirect cleanly to /dashboard?payment=success
+      setTimeout(() => {
+        window.location.replace('/dashboard?payment=success');
+      }, 350);
+      return;
+    }
+
+    if (paymentAction === 'success') {
       setIsStickerModalOpen(true);
+      fetchUserStickers();
     }
   }, [currentUser]);
 
@@ -100,7 +133,7 @@ export const Dashboard = () => {
       if (res.ok) {
         fetchAdminStickers();
       }
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // Render clean loader while auth context restores from localStorage
@@ -136,16 +169,19 @@ export const Dashboard = () => {
     return true;
   });
 
-  const activeSticker = userStickers.find(s => s.status === 'issued' || s.status === 'approved');
-  const pendingSticker = userStickers.find(s => s.status === 'pending');
-  const hasRejectedOnly = userStickers.length > 0 && !activeSticker && !pendingSticker && userStickers.some(s => s.status === 'rejected');
+  const activeSticker = userStickers.find(s => (s.status === 'issued' || s.status === 'claimed' || s.status === 'paid' || s.status === 'ready_for_release') && s.payment_status === 'paid');
+  const paymentSubmittedSticker = userStickers.find(s => s.status === 'payment_submitted');
+  const approvedSticker = userStickers.find(s => s.status === 'approved' && s.payment_status !== 'paid');
+  const pendingReviewSticker = userStickers.find(s => s.status === 'pending_review' || s.status === 'pending');
+  const rejectedSticker = userStickers.find(s => s.status === 'rejected');
+  const hasRejectedOnly = userStickers.length > 0 && !activeSticker && !paymentSubmittedSticker && !approvedSticker && !pendingReviewSticker && Boolean(rejectedSticker);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between selection:bg-amber-500 selection:text-white">
       <Navbar />
 
       <main className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full my-auto space-y-8">
-        
+
         {/* Welcome Header */}
         <div className="bg-gradient-to-r from-umak-navy to-slate-900 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
           <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-umak-orange/10 to-transparent pointer-events-none"></div>
@@ -161,13 +197,23 @@ export const Dashboard = () => {
                 </span>
               )}
               {!isAdmin && activeSticker && (
-                <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30 text-xs font-bold">
-                  <i className="fa-solid fa-id-card mr-1"></i> UMak Sticker Active
+                <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-bold">
+                  <i className="fa-solid fa-id-card mr-1"></i> UMak Sticker Active / Ready
+                </span>
+              )}
+              {!isAdmin && paymentSubmittedSticker && !activeSticker && (
+                <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 text-xs font-bold animate-pulse">
+                  <i className="fa-solid fa-receipt mr-1"></i> Payment Proof Submitted
+                </span>
+              )}
+              {!isAdmin && approvedSticker && (
+                <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 text-xs font-bold animate-pulse">
+                  <i className="fa-solid fa-bell mr-1"></i> Approved — Ready to Pay
                 </span>
               )}
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold font-display">
-              Welcome back, {currentUser.name}! 👋
+              Welcome back, {currentUser.name}!
             </h1>
             <p className="text-slate-300 text-sm max-w-lg">
               {isAdmin
@@ -200,11 +246,10 @@ export const Dashboard = () => {
           <div className="flex items-center bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto">
             <button
               onClick={() => setDashboardTab('monitor')}
-              className={`flex-1 min-w-[150px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                dashboardTab === 'monitor'
-                  ? 'bg-umak-navy text-white shadow-md'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
+              className={`flex-1 min-w-[150px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${dashboardTab === 'monitor'
+                ? 'bg-umak-navy text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
             >
               <i className="fa-solid fa-satellite-dish text-umak-orange"></i>
               <span>Live Parking Monitor</span>
@@ -212,11 +257,10 @@ export const Dashboard = () => {
 
             <button
               onClick={() => setDashboardTab('sticker')}
-              className={`flex-1 min-w-[150px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                dashboardTab === 'sticker'
-                  ? 'bg-umak-navy text-white shadow-md'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
+              className={`flex-1 min-w-[150px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${dashboardTab === 'sticker'
+                ? 'bg-umak-navy text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
             >
               <i className="fa-solid fa-id-card text-umak-orange"></i>
               <span>My Vehicle Sticker</span>
@@ -225,6 +269,38 @@ export const Dashboard = () => {
                   {userStickers.length}
                 </span>
               )}
+            </button>
+          </div>
+        )}
+
+        {/* PAYMENT HELD ALERT BANNER (IF ANY STICKER IS ON HOLD) */}
+        {!isAdmin && userStickers.some(s => s.status === 'payment_held') && (
+          <div className="p-4 bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+                <i className="fa-solid fa-hand text-lg" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-amber-950 flex items-center gap-2">
+                  Action Required: Sticker Payment Verification On Hold
+                  <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-extrabold uppercase">Pending Your Update</span>
+                </h4>
+                <p className="text-xs text-amber-900 mt-0.5">
+                  OHSO Admin remarks:{' '}
+                  <span className="font-bold italic text-amber-950">
+                    "{userStickers.find(s => s.status === 'payment_held')?.rejection_reason || 'Proof of payment needs revision.'}"
+                  </span>
+                </p>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  You do not need to pay again. Simply attach your clear payment receipt screenshot to resume verification.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsStickerModalOpen(true)}
+              className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer flex-shrink-0"
+            >
+              <i className="fa-solid fa-cloud-arrow-up" /> Re-upload Payment Proof
             </button>
           </div>
         )}
@@ -349,7 +425,7 @@ export const Dashboard = () => {
         {/* ===== TAB 2: MY VEHICLE STICKER (REGULAR USER ONLY) ===== */}
         {!isAdmin && dashboardTab === 'sticker' && (
           <div className="space-y-8 tab-content-enter">
-            
+
             {/* Top Action Bar */}
             <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
@@ -366,26 +442,55 @@ export const Dashboard = () => {
                   className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 min-h-[44px]"
                 >
                   <i className="fa-solid fa-calendar-check"></i>
-                  <span>Guest / Visitor Parking Pass</span>
                 </button>
 
                 {activeSticker ? (
-                  <div className="px-5 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-xs flex items-center gap-2">
+                  <button
+                    onClick={() => setIsStickerModalOpen(true)}
+                    className="px-5 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+                  >
                     <i className="fa-solid fa-circle-check text-emerald-600 text-base"></i>
-                    <span>Sticker Issued & Active</span>
-                  </div>
-                ) : pendingSticker ? (
-                  <div className="px-5 py-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 font-bold text-xs flex items-center gap-2">
+                    <span>Sticker Active — View Digital Pass</span>
+                  </button>
+                ) : paymentSubmittedSticker ? (
+                  <button
+                    onClick={() => setIsStickerModalOpen(true)}
+                    className="px-5 py-2.5 rounded-2xl bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-900 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+                  >
+                    <i className="fa-solid fa-receipt text-blue-600 text-base"></i>
+                    <span>Payment Proof Submitted — View Receipt</span>
+                  </button>
+                ) : approvedSticker ? (
+                  <button
+                    onClick={() => setIsStickerModalOpen(true)}
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-600/25 transition-all cursor-pointer flex items-center gap-2 min-h-[44px] animate-pulse"
+                  >
+                    <i className="fa-solid fa-credit-card"></i>
+                    <span>Approved! Pay ₱200 & Upload Proof</span>
+                  </button>
+                ) : pendingReviewSticker ? (
+                  <button
+                    onClick={() => setIsStickerModalOpen(true)}
+                    className="px-5 py-2.5 rounded-2xl bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-900 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all"
+                  >
                     <i className="fa-solid fa-clock animate-pulse text-amber-600 text-base"></i>
-                    <span>Application Pending OHSO Review</span>
-                  </div>
+                    <span>Documents Under Review — View Status</span>
+                  </button>
+                ) : rejectedSticker ? (
+                  <button
+                    onClick={() => setIsStickerModalOpen(true)}
+                    className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-red-600/25 transition-all cursor-pointer flex items-center gap-2 min-h-[44px]"
+                  >
+                    <i className="fa-solid fa-triangle-exclamation"></i>
+                    <span>Application Rejected — Resubmit Docs</span>
+                  </button>
                 ) : (
                   <button
                     onClick={() => setIsStickerModalOpen(true)}
                     className="px-6 py-3 bg-umak-orange hover:bg-umak-orangelight text-white font-bold text-sm rounded-xl shadow-lg shadow-orange-500/25 transition-all cursor-pointer flex items-center gap-2 min-h-[44px]"
                   >
                     <i className="fa-solid fa-plus-circle"></i>
-                    <span>{hasRejectedOnly ? 'Re-apply for UMak Sticker (₱200.00)' : 'Apply for UMak Sticker (₱200.00)'}</span>
+                    <span>Apply for UMak Sticker (₱200.00)</span>
                   </button>
                 )}
               </div>
@@ -416,7 +521,7 @@ export const Dashboard = () => {
                     <i className="fa-solid fa-barcode text-4xl text-slate-300"></i>
                     <p className="text-[10px] font-mono text-slate-300 uppercase tracking-widest">OHSO Verified Digital Badge</p>
                     <span className="inline-block px-3 py-1 rounded-md bg-emerald-500 text-white font-bold text-xs">
-                      ₱200.00 Paid ({activeSticker.payment_method.toUpperCase()})
+                      ₱200.00 Paid ({activeSticker.payment_method ? activeSticker.payment_method.toUpperCase() : 'VERIFIED'})
                     </span>
                   </div>
                 </div>
@@ -468,8 +573,16 @@ export const Dashboard = () => {
                             <span className="text-[11px] text-slate-500 capitalize">{stk.vehicle_make} ({stk.vehicle_type})</span>
                           </td>
                           <td className="p-3.5 font-mono">
-                            <span className="font-bold text-emerald-600 block">{stk.payment_ref_no}</span>
-                            <span className="text-[10px] text-slate-500 uppercase">{stk.payment_method} PAID</span>
+                            <span className="font-bold text-slate-800 block text-xs">{stk.payment_ref_no || 'DRAFT'}</span>
+                            {stk.payment_status === 'paid' || stk.payment_proof_doc ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-0.5">
+                                <i className="fa-solid fa-circle-check text-[9px]"></i> {stk.payment_method || 'PayMongo'} PAID
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 uppercase bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 mt-0.5">
+                                <i className="fa-solid fa-clock text-[9px]"></i> Unpaid Draft (₱200)
+                              </span>
+                            )}
                           </td>
                           <td className="p-3.5">
                             <button
@@ -480,15 +593,39 @@ export const Dashboard = () => {
                             </button>
                           </td>
                           <td className="p-3.5">
-                            <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] border capitalize ${
-                              stk.status === 'issued' || stk.status === 'approved'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : stk.status === 'rejected'
-                                  ? 'bg-red-50 text-red-700 border-red-200'
-                                  : 'bg-amber-50 text-amber-700 border-amber-200'
-                            }`}>
-                              {stk.status}
-                            </span>
+                            <StatusBadge status={stk.status} variant="short" />
+                            {stk.status === 'payment_held' && (
+                              <button
+                                onClick={() => setIsStickerModalOpen(true)}
+                                className="block text-[11px] text-amber-700 hover:text-amber-900 font-extrabold mt-1.5 cursor-pointer underline"
+                              >
+                                <i className="fa-solid fa-cloud-arrow-up mr-1" /> Re-upload Payment Proof
+                              </button>
+                            )}
+                            {stk.status === 'approved' && !stk.payment_ref_no && (
+                              <button
+                                onClick={() => setIsStickerModalOpen(true)}
+                                className="block text-[11px] text-indigo-700 hover:text-indigo-900 font-extrabold mt-1.5 cursor-pointer underline"
+                              >
+                                <i className="fa-solid fa-credit-card mr-1" /> Complete Payment (₱200)
+                              </button>
+                            )}
+                            {stk.status === 'payment_submitted' && (
+                              <button
+                                onClick={() => setIsStickerModalOpen(true)}
+                                className="block text-[10px] text-blue-600 hover:text-blue-800 hover:underline font-bold mt-1.5 cursor-pointer"
+                              >
+                                <i className="fa-solid fa-receipt mr-1" /> View Receipt & Proof
+                              </button>
+                            )}
+                            {(stk.status === 'ready_for_release' || stk.status === 'paid' || stk.status === 'claimed' || stk.status === 'issued') && (
+                              <button
+                                onClick={() => setIsStickerModalOpen(true)}
+                                className="block text-[10px] text-emerald-600 hover:text-emerald-800 hover:underline font-bold mt-1.5 cursor-pointer"
+                              >
+                                <i className="fa-solid fa-id-badge mr-1" /> Digital Pass & QR
+                              </button>
+                            )}
                           </td>
                           <td className="p-3.5 font-mono font-bold text-umak-navy">
                             {stk.sticker_number ? stk.sticker_number : <span className="text-slate-400 font-normal italic">Pending OHSO Pickup</span>}

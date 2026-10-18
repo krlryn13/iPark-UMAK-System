@@ -25,14 +25,15 @@ const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
     'http://127.0.0.1:5173',
-    process.env.FRONTEND_URL    // e.g. https://ipark-umak.vercel.app
-].filter(Boolean);
+    process.env.FRONTEND_URL
+].filter(Boolean).map(url => url.replace(/\/+$/, ''));
 
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (mobile apps, Postman, server-to-server)
         if (!origin) return callback(null, true);
-        if (allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+        const cleanOrigin = origin.replace(/\/+$/, '');
+        if (allowedOrigins.includes(cleanOrigin)) {
             return callback(null, true);
         }
         callback(new Error('Not allowed by CORS'));
@@ -56,50 +57,37 @@ app.use('/api/stickers', stickerRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/payment', paymentRoutes);
 
-// Diagnostic DB Health Check endpoint
+// Diagnostic DB Health Check endpoint (Safe generic response)
 app.get('/api/db-health', (req, res) => {
     db.query('SELECT 1 + 1 AS result', (err, rows) => {
         if (err) {
             return res.status(500).json({
                 status: 'error',
-                message: 'Database connection failed',
-                error: err.message,
-                code: err.code,
-                host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
-                port: process.env.DB_PORT || process.env.MYSQLPORT || 3306
+                message: 'Database connection failed'
             });
         }
         res.json({
             status: 'ok',
-            message: 'Database pool is connected and functioning perfectly!',
-            result: rows[0],
-            host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
-            port: process.env.DB_PORT || process.env.MYSQLPORT || 3306
+            message: 'Database pool is connected and operational.'
         });
     });
 });
 
-// Diagnostic Email Test endpoint
-app.get('/api/email-test', async (req, res) => {
+// Diagnostic Email Test endpoint — restricted to authenticated Admin users only
+const { authenticateToken, requireRole } = require('./middleware/authMiddleware');
+app.get('/api/email-test', authenticateToken, requireRole('admin'), async (req, res) => {
     const toEmail = req.query.email || process.env.EMAIL_USER;
     const { sendVerificationEmail } = require('./services/emailService');
     try {
-        await sendVerificationEmail(toEmail, 'Test User', '123456');
+        await sendVerificationEmail(toEmail, 'Test Admin', '123456');
         res.json({
             status: 'ok',
-            message: `Test email sent successfully to ${toEmail}! Check your inbox/spam folder.`
+            message: `Test email sent successfully to ${toEmail}!`
         });
     } catch (err) {
         res.status(500).json({
             status: 'error',
-            message: 'Failed to send email via SMTP',
-            errorMessage: err?.message,
-            errorCode: err?.code,
-            errorCommand: err?.command,
-            errorResponse: err?.response,
-            errorStack: err?.stack,
-            emailUser: process.env.EMAIL_USER ? `${process.env.EMAIL_USER.slice(0, 4)}...` : 'NOT_SET',
-            emailPassLength: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0
+            message: 'Failed to send test email via SMTP'
         });
     }
 });

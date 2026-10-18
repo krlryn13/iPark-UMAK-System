@@ -16,7 +16,7 @@ async function initAuthDB() {
         password VARCHAR(255) NOT NULL,
         role VARCHAR(50) DEFAULT 'student',
         is_verified TINYINT(1) DEFAULT 0,
-        verification_code VARCHAR(10) NULL,
+        verification_code VARCHAR(255) NULL,
         failed_login_attempts INT DEFAULT 0,
         locked_until DATETIME NULL,
         unlock_requested TINYINT(1) DEFAULT 0,
@@ -30,7 +30,10 @@ async function initAuthDB() {
       await connection.query('ALTER TABLE users ADD COLUMN is_verified TINYINT(1) DEFAULT 0');
     } catch (e) {}
     try {
-      await connection.query('ALTER TABLE users ADD COLUMN verification_code VARCHAR(10) NULL');
+      await connection.query('ALTER TABLE users ADD COLUMN verification_code VARCHAR(255) NULL');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE users MODIFY COLUMN verification_code VARCHAR(255) NULL');
     } catch (e) {}
     try {
       await connection.query('ALTER TABLE users ADD COLUMN failed_login_attempts INT DEFAULT 0');
@@ -45,7 +48,10 @@ async function initAuthDB() {
       await connection.query('ALTER TABLE users ADD COLUMN unlock_requested_at DATETIME NULL');
     } catch (e) {}
     try {
-      await connection.query('ALTER TABLE users ADD COLUMN reset_otp VARCHAR(10) NULL');
+      await connection.query('ALTER TABLE users ADD COLUMN reset_otp VARCHAR(255) NULL');
+    } catch (e) {}
+    try {
+      await connection.query('ALTER TABLE users MODIFY COLUMN reset_otp VARCHAR(255) NULL');
     } catch (e) {}
     try {
       await connection.query('ALTER TABLE users ADD COLUMN reset_otp_expires DATETIME NULL');

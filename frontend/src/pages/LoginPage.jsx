@@ -27,7 +27,7 @@ export const LoginPage = () => {
 
   // Password strength rules (computed live)
   const passwordRules = [
-    { label: 'At least 8 characters', passed: formData.password.length >= 8 },
+    { label: 'At least 12 characters', passed: formData.password.length >= 12 },
     { label: 'Contains uppercase letter (A-Z)', passed: /[A-Z]/.test(formData.password) },
     { label: 'Contains lowercase letter (a-z)', passed: /[a-z]/.test(formData.password) },
     { label: 'Contains a number (0-9)', passed: /[0-9]/.test(formData.password) },

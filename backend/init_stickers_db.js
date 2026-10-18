@@ -37,19 +37,19 @@ async function initStickersDB() {
 
     try {
       await connection.query('ALTER TABLE vehicle_stickers MODIFY COLUMN payment_status ENUM("paid", "pending", "unpaid") DEFAULT "pending"');
-    } catch (e) {}
+    } catch (e) { }
     try {
       await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN student_id_doc TEXT NULL');
-    } catch (e) {}
+    } catch (e) { }
     try {
       await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN or_cr_doc TEXT NULL');
-    } catch (e) {}
+    } catch (e) { }
     try {
       await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN license_doc TEXT NULL');
-    } catch (e) {}
+    } catch (e) { }
     try {
       await connection.query('ALTER TABLE vehicle_stickers ADD COLUMN payment_proof_doc TEXT NULL');
-    } catch (e) {}
+    } catch (e) { }
 
     console.log('✓ vehicle_stickers table created & verified successfully!');
   } catch (err) {
@@ -60,5 +60,5 @@ async function initStickersDB() {
 module.exports = { initStickersDB };
 
 if (require.main === module) {
-    initStickersDB();
+  initStickersDB();
 }

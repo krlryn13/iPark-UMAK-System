@@ -7,9 +7,12 @@ const paymongoService = require('../services/paymongoService');
 const { handleServerError } = require('../utils/errorHandler');
 const db = require('../config/db');
 
+// Valid PayMongo payment method identifiers
+const VALID_PAYMENT_METHODS = ['gcash', 'paymaya', 'qrph', 'card'];
+
 // Create PayMongo Checkout Session
 const createCheckoutSession = async (req, res) => {
-  const { amount, description, referenceNo, returnUrl } = req.body;
+  const { amount, description, referenceNo, returnUrl, paymentMethod } = req.body;
   const user = req.user; // attached by authenticateToken middleware
 
   if (!user) {
@@ -19,6 +22,13 @@ const createCheckoutSession = async (req, res) => {
   const cleanRefNo = referenceNo || `PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
   const defaultReturnUrl = returnUrl || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`;
 
+  // If a specific payment method is requested, restrict the checkout to that method only.
+  // This pre-selects the channel on the PayMongo checkout page.
+  const selectedMethod = VALID_PAYMENT_METHODS.includes(paymentMethod) ? paymentMethod : null;
+  const paymentMethodTypes = selectedMethod
+    ? [selectedMethod]
+    : ['gcash', 'paymaya', 'card', 'qrph'];
+
   try {
     const checkoutData = await paymongoService.createCheckoutSession({
       amount: amount || 200.00,
@@ -26,8 +36,22 @@ const createCheckoutSession = async (req, res) => {
       applicantName: user.name,
       email: user.email,
       referenceNo: cleanRefNo,
-      returnUrl: defaultReturnUrl
+      returnUrl: defaultReturnUrl,
+      paymentMethodTypes,
     });
+
+    // Directly bind this reference number and method to the user's pending sticker application
+    db.query(
+      `UPDATE vehicle_stickers 
+       SET payment_ref_no = ?, 
+           payment_method = ?,
+           updated_at = NOW() 
+       WHERE user_id = ? AND status = 'pending' AND payment_status = 'pending'`,
+      [cleanRefNo, selectedMethod || 'gcash', user.id],
+      (updErr) => {
+        if (updErr) console.warn('[CHECKOUT BIND WARN]', updErr.message);
+      }
+    );
 
     res.json({
       message: 'PayMongo checkout session created successfully.',
@@ -52,21 +76,27 @@ const verifyCheckoutSession = async (req, res) => {
     const sessionData = await paymongoService.retrieveCheckoutSession(sessionId);
 
     if (sessionData.isPaid) {
-      // Update sticker application payment_status to 'paid' in DB if reference_number exists
-      const refNo = sessionData.raw.attributes.reference_number;
-      if (refNo) {
-        db.query(
-          'UPDATE vehicle_stickers SET payment_status = "paid" WHERE payment_ref_no = ?',
-          [refNo],
-          (updErr) => {
-            if (updErr) console.error('[DB UPDATE ERROR]', updErr);
-          }
-        );
-      }
+      // Update sticker application payment_status to 'paid' and payment_ref_no to exact PayMongo Payment ID
+      const refNo = sessionData.referenceNumber || sessionData.raw?.attributes?.reference_number;
+      const payId = sessionData.paymentId || refNo;
+      const userId = req.user ? req.user.id : null;
+
+      db.query(
+        `UPDATE vehicle_stickers 
+         SET payment_status = "paid", 
+             payment_ref_no = COALESCE(?, payment_ref_no) 
+         WHERE (payment_ref_no = ? OR payment_ref_no = ? OR payment_ref_no LIKE ? ${userId ? 'OR (user_id = ? AND status = "pending")' : ''})`,
+        userId ? [payId, refNo, payId, `%${sessionId}%`, userId] : [payId, refNo, payId, `%${sessionId}%`],
+        (updErr) => {
+          if (updErr) console.error('[DB UPDATE ERROR]', updErr);
+        }
+      );
     }
 
     res.json({
       sessionId: sessionData.sessionId,
+      paymentId: sessionData.paymentId,
+      referenceNumber: sessionData.referenceNumber,
       isPaid: sessionData.isPaid,
       status: sessionData.status,
       payments: sessionData.payments

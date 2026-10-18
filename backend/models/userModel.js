@@ -13,10 +13,10 @@ const createUser = (userData, callback) => {
     );
 };
 
-const verifyUserCode = (email, code, callback) => {
+const verifyUserCode = (email, callback) => {
     db.query(
-        'UPDATE users SET is_verified = 1, verification_code = NULL WHERE email = ? AND verification_code = ?',
-        [email, code],
+        'UPDATE users SET is_verified = 1, verification_code = NULL WHERE email = ?',
+        [email],
         callback
     );
 };

@@ -23,7 +23,7 @@ export const formatDriverLicense = (value) => {
   if (!value) return '';
   const raw = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (raw.length === 0) return '';
-  
+
   // First character must be a letter (A-Z)
   const firstChar = raw[0];
   if (!/[A-Z]/.test(firstChar)) {
@@ -98,7 +98,7 @@ export const StickerFormStep1 = ({
 
   return (
     <form onSubmit={handleProceedToPayment} className="space-y-4 max-h-[75vh] sm:max-h-[70vh] overflow-y-auto touch-scroll pr-1">
-      
+
       {/* Student ID */}
       <div>
         <label className="block text-xs font-bold text-slate-700 mb-1">Student / Faculty ID Number</label>
@@ -111,19 +111,17 @@ export const StickerFormStep1 = ({
             onChange={onIdInputChange}
             placeholder="e.g. K12345678"
             required
-            className={`w-full bg-slate-50 border rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-900 font-mono font-bold placeholder-slate-400 focus:outline-none focus:bg-white transition-colors ${
-              formData.student_id_num.length === 0
+            className={`w-full bg-slate-50 border rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-900 font-mono font-bold placeholder-slate-400 focus:outline-none focus:bg-white transition-colors ${formData.student_id_num.length === 0
                 ? 'border-slate-300 focus:border-umak-orange'
                 : isIdValid
-                ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
-                : 'border-red-400 focus:border-red-500 bg-red-50/20'
-            }`}
+                  ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
+                  : 'border-red-400 focus:border-red-500 bg-red-50/20'
+              }`}
           />
         </div>
         {formData.student_id_num.length > 0 && (
-          <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${
-            isIdValid ? 'text-emerald-600' : 'text-red-500'
-          }`}>
+          <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${isIdValid ? 'text-emerald-600' : 'text-red-500'
+            }`}>
             <i className={`fa-solid ${isIdValid ? 'fa-circle-check' : 'fa-circle-xmark'} text-[10px]`}></i>
             <span>{isIdValid ? 'Valid UMak ID format' : 'Min 6 alphanumeric characters (e.g. K12345678)'}</span>
           </div>
@@ -137,11 +135,10 @@ export const StickerFormStep1 = ({
           <button
             type="button"
             onClick={() => setFormData(p => ({ ...p, vehicle_type: 'car' }))}
-            className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
-              formData.vehicle_type === 'car'
+            className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${formData.vehicle_type === 'car'
                 ? 'bg-umak-navy text-white border-umak-navy shadow-sm'
                 : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-            }`}
+              }`}
           >
             <i className="fa-solid fa-car text-base"></i>
             <span>4-Wheeler Car</span>
@@ -150,11 +147,10 @@ export const StickerFormStep1 = ({
           <button
             type="button"
             onClick={() => setFormData(p => ({ ...p, vehicle_type: 'motorcycle' }))}
-            className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
-              formData.vehicle_type === 'motorcycle'
+            className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${formData.vehicle_type === 'motorcycle'
                 ? 'bg-umak-navy text-white border-umak-navy shadow-sm'
                 : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-            }`}
+              }`}
           >
             <i className="fa-solid fa-motorcycle text-base"></i>
             <span>Motorcycle</span>
@@ -163,11 +159,10 @@ export const StickerFormStep1 = ({
           <button
             type="button"
             onClick={() => setFormData(p => ({ ...p, vehicle_type: 'ebike' }))}
-            className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
-              formData.vehicle_type === 'ebike'
+            className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${formData.vehicle_type === 'ebike'
                 ? 'bg-umak-navy text-white border-umak-navy shadow-sm'
                 : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-            }`}
+              }`}
           >
             <i className="fa-solid fa-bolt text-base"></i>
             <span>E-Bike / Scooter</span>
@@ -201,18 +196,16 @@ export const StickerFormStep1 = ({
             onChange={onPlateInputChange}
             placeholder="ABC 1234 or MV File No."
             required
-            className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-sm text-slate-900 uppercase font-mono font-bold focus:outline-none focus:bg-white transition-colors ${
-              formData.plate_number.length === 0
+            className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-sm text-slate-900 uppercase font-mono font-bold focus:outline-none focus:bg-white transition-colors ${formData.plate_number.length === 0
                 ? 'border-slate-300 focus:border-umak-orange'
                 : isPlateValid
-                ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
-                : 'border-red-400 focus:border-red-500 bg-red-50/20'
-            }`}
+                  ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
+                  : 'border-red-400 focus:border-red-500 bg-red-50/20'
+              }`}
           />
           {formData.plate_number.length > 0 && (
-            <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${
-              isPlateValid ? 'text-emerald-600' : 'text-red-500'
-            }`}>
+            <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${isPlateValid ? 'text-emerald-600' : 'text-red-500'
+              }`}>
               <i className={`fa-solid ${isPlateValid ? 'fa-circle-check' : 'fa-circle-xmark'} text-[10px]`}></i>
               <span>{isPlateValid ? 'Official LTO Plate format' : 'Format: ABC 1234 or MV File No.'}</span>
             </div>
@@ -230,18 +223,16 @@ export const StickerFormStep1 = ({
             placeholder="N01-12-345678"
             maxLength={13}
             required
-            className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-sm text-slate-900 font-mono font-bold focus:outline-none focus:bg-white transition-colors ${
-              formData.license_number.length === 0
+            className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-sm text-slate-900 font-mono font-bold focus:outline-none focus:bg-white transition-colors ${formData.license_number.length === 0
                 ? 'border-slate-300 focus:border-umak-orange'
                 : isLicenseValid
-                ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
-                : 'border-red-400 focus:border-red-500 bg-red-50/20'
-            }`}
+                  ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
+                  : 'border-red-400 focus:border-red-500 bg-red-50/20'
+              }`}
           />
           {formData.license_number.length > 0 && (
-            <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${
-              isLicenseValid ? 'text-emerald-600' : 'text-red-500'
-            }`}>
+            <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${isLicenseValid ? 'text-emerald-600' : 'text-red-500'
+              }`}>
               <i className={`fa-solid ${isLicenseValid ? 'fa-circle-check' : 'fa-circle-xmark'} text-[10px]`}></i>
               <span>{isLicenseValid ? 'Official LTO License format' : 'Format: A00-00-000000'}</span>
             </div>
@@ -261,18 +252,16 @@ export const StickerFormStep1 = ({
             onChange={onOrInputChange}
             placeholder="OR-98765432"
             required
-            className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-sm text-slate-900 font-mono font-bold focus:outline-none focus:bg-white transition-colors ${
-              formData.or_number.length === 0
+            className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-sm text-slate-900 font-mono font-bold focus:outline-none focus:bg-white transition-colors ${formData.or_number.length === 0
                 ? 'border-slate-300 focus:border-umak-orange'
                 : isOrValid
-                ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
-                : 'border-red-400 focus:border-red-500 bg-red-50/20'
-            }`}
+                  ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
+                  : 'border-red-400 focus:border-red-500 bg-red-50/20'
+              }`}
           />
           {formData.or_number.length > 0 && (
-            <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${
-              isOrValid ? 'text-emerald-600' : 'text-red-500'
-            }`}>
+            <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${isOrValid ? 'text-emerald-600' : 'text-red-500'
+              }`}>
               <i className={`fa-solid ${isOrValid ? 'fa-circle-check' : 'fa-circle-xmark'} text-[10px]`}></i>
               <span>{isOrValid ? 'Valid LTO OR Number' : 'Min 8 characters (e.g. OR-98765432)'}</span>
             </div>
@@ -289,18 +278,16 @@ export const StickerFormStep1 = ({
             onChange={onCrInputChange}
             placeholder="CR-12345678"
             required
-            className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-sm text-slate-900 font-mono font-bold focus:outline-none focus:bg-white transition-colors ${
-              formData.cr_number.length === 0
+            className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-sm text-slate-900 font-mono font-bold focus:outline-none focus:bg-white transition-colors ${formData.cr_number.length === 0
                 ? 'border-slate-300 focus:border-umak-orange'
                 : isCrValid
-                ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
-                : 'border-red-400 focus:border-red-500 bg-red-50/20'
-            }`}
+                  ? 'border-emerald-400 focus:border-emerald-500 bg-emerald-50/20'
+                  : 'border-red-400 focus:border-red-500 bg-red-50/20'
+              }`}
           />
           {formData.cr_number.length > 0 && (
-            <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${
-              isCrValid ? 'text-emerald-600' : 'text-red-500'
-            }`}>
+            <div className={`flex items-center gap-1.5 mt-1 text-[11px] font-semibold ${isCrValid ? 'text-emerald-600' : 'text-red-500'
+              }`}>
               <i className={`fa-solid ${isCrValid ? 'fa-circle-check' : 'fa-circle-xmark'} text-[10px]`}></i>
               <span>{isCrValid ? 'Valid LTO CR Number' : 'Min 7 characters (e.g. CR-12345678)'}</span>
             </div>
@@ -355,11 +342,10 @@ export const StickerFormStep1 = ({
       <button
         type="submit"
         disabled={!isFormValid}
-        className={`w-full py-3 font-bold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mt-4 ${
-          isFormValid
+        className={`w-full py-3 font-bold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mt-4 ${isFormValid
             ? 'bg-gradient-to-r from-umak-navy to-umak-navydark hover:from-umak-orange hover:to-amber-600 text-white cursor-pointer'
             : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
-        }`}
+          }`}
       >
         <span>Proceed to Payment (₱200.00)</span>
         <i className="fa-solid fa-arrow-right"></i>

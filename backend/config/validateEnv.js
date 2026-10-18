@@ -1,8 +1,4 @@
-/**
- * Environment Variable Validation
- * Validates that all critical environment variables are set before the server starts.
- * Import this at the top of server.js.
- */
+
 
 require('dotenv').config();
 

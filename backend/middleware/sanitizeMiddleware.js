@@ -1,16 +1,10 @@
-/**
- * Input Sanitization Middleware
- * Defense-in-depth layer that sanitizes all incoming request data.
- * Strips HTML tags, trims whitespace, and prevents XSS payloads.
- */
 
-// Strip HTML tags from a string (prevent stored XSS)
+
 const stripHtmlTags = (str) => {
     if (typeof str !== 'string') return str;
     return str.replace(/<[^>]*>/g, '');
 };
 
-// Recursively sanitize all string values in an object
 const sanitizeObject = (obj) => {
     if (obj === null || obj === undefined) return obj;
     if (typeof obj === 'string') {

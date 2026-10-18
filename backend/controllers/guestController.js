@@ -113,7 +113,13 @@ const createReservation = (req, res) => {
 };
 
 const getReservationsByEmail = (req, res) => {
-  const email = req.params.email;
+  const email = (req.params.email || '').trim().toLowerCase();
+
+  // Authorization check: User can only view their own reservations unless they are admin
+  if (req.user && req.user.role !== 'admin' && (req.user.email || '').toLowerCase() !== email) {
+    return res.status(403).json({ error: 'Access denied: You can only view your own guest parking reservations.' });
+  }
+
   guestModel.getByEmail(email, (err, results) => {
     if (err) return handleServerError(res, err, 'Failed to fetch guest reservations.');
     res.json(results);

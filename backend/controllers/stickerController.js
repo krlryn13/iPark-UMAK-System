@@ -1,14 +1,9 @@
 const stickerModel = require('../models/stickerModel');
 const emailService = require('../services/emailService');
+const paymongoService = require('../services/paymongoService');
 const db = require('../config/db');
 const { handleServerError } = require('../utils/errorHandler');
 const { encryptAES256, decryptAES256 } = require('../utils/encryption');
-
-const generateRefNo = (method) => {
-  const prefix = method ? method.toUpperCase() : 'PAY';
-  const randomStr = Math.floor(100000 + Math.random() * 900000);
-  return `${prefix}-${Date.now().toString().slice(-6)}-${randomStr}`;
-};
 
 // Helper to generate official UMak sticker code (e.g. UMK-CAR-2026-8941)
 const generateStickerNumber = (vehicleType = 'car') => {
@@ -18,10 +13,13 @@ const generateStickerNumber = (vehicleType = 'car') => {
   return `UMK-${prefix}-${year}-${random}`;
 };
 
-// APPLY FOR STICKER + ONLINE PAYMENT + SECURE DOCUMENT UPLOADS
-const applySticker = (req, res) => {
+// 1. APPLY FOR STICKER (DOCUMENTS & FORM ONLY, PAYMENT COMES AFTER ADMIN APPROVAL)
+const applySticker = async (req, res) => {
+  const effectiveUserId = (req.user && req.user.role === 'admin' && req.body.user_id)
+    ? req.body.user_id
+    : (req.user ? req.user.id : req.body.user_id);
+
   const {
-    user_id,
     applicant_name,
     email,
     student_id_num,
@@ -30,9 +28,10 @@ const applySticker = (req, res) => {
     plate_number,
     or_number,
     cr_number,
-    license_number,
-    payment_method
+    license_number
   } = req.body;
+
+  const user_id = effectiveUserId;
 
   if (!user_id || !student_id_num || !plate_number) {
     return res.status(400).json({ error: 'Required information is missing (User ID, Student ID, Plate Number).' });
@@ -55,13 +54,10 @@ const applySticker = (req, res) => {
   const student_id_doc = files.student_id_doc ? encryptAES256(`/uploads/documents/${files.student_id_doc[0].filename}`) : null;
   const or_cr_doc = files.or_cr_doc ? encryptAES256(`/uploads/documents/${files.or_cr_doc[0].filename}`) : null;
   const license_doc = files.license_doc ? encryptAES256(`/uploads/documents/${files.license_doc[0].filename}`) : null;
-  const payment_proof_doc = files.payment_proof_doc ? encryptAES256(`/uploads/documents/${files.payment_proof_doc[0].filename}`) : null;
-
-  const payment_ref_no = `PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
   const applicationData = {
     user_id,
-    applicant_name: applicant_name || 'Heron Applicant',
+    applicant_name: applicant_name || 'UMak Applicant',
     email: email || '',
     student_id_num: student_id_num.trim(),
     vehicle_type: vehicle_type || 'car',
@@ -71,20 +67,19 @@ const applySticker = (req, res) => {
     cr_number: cr_number || 'CR-PENDING',
     license_number: license_number || 'LIC-PENDING',
     amount: 200.00,
-    payment_method: payment_method ? payment_method.toLowerCase() : 'gcash',
-    payment_ref_no,
-    payment_status: payment_proof_doc ? 'paid' : 'pending',
+    payment_method: null,
+    payment_ref_no: null,
+    payment_status: 'unpaid',
     student_id_doc,
     or_cr_doc,
     license_doc,
-    payment_proof_doc
+    payment_proof_doc: null,
+    status: 'pending_review'
   };
 
-  // Check if user already has an active or pending application
   stickerModel.getByUserId(user_id, (err, existing) => {
     if (err) return handleServerError(res, err, 'Failed to check existing sticker applications.');
 
-    // Check if a sticker is active (less than 1 year old) or pending
     const isWithinOneYear = (dateStr) => {
       if (!dateStr) return true;
       const createdDate = new Date(dateStr);
@@ -93,62 +88,255 @@ const applySticker = (req, res) => {
       return createdDate >= oneYearAgo;
     };
 
-    const activeOrPending = (existing || []).find(s => {
-      if (s.status === 'expired' || s.status === 'rejected') return false;
-      // If approved/issued but older than 1 year, allow re-application/renewal
-      if ((s.status === 'approved' || s.status === 'issued') && !isWithinOneYear(s.created_at)) {
-        return false;
-      }
-      return s.status === 'pending' || s.status === 'approved' || s.status === 'issued';
-    });
-    
-    if (activeOrPending && activeOrPending.status === 'pending') {
-      // Update existing pending application with new files/payment details
+    // If there is an existing application in pending_review or rejected (allow resubmission)
+    const pendingOrRejected = (existing || []).find(s => s.status === 'pending_review' || s.status === 'pending' || s.status === 'rejected');
+
+    if (pendingOrRejected) {
       const updateData = {
-        student_id_num: student_id_num ? student_id_num.trim() : activeOrPending.student_id_num,
-        plate_number: plate_number ? plate_number.trim().toUpperCase() : activeOrPending.plate_number,
-        vehicle_type: vehicle_type || activeOrPending.vehicle_type,
-        vehicle_make: vehicle_make || activeOrPending.vehicle_make,
-        or_number: or_number || activeOrPending.or_number,
-        cr_number: cr_number || activeOrPending.cr_number,
-        license_number: license_number || activeOrPending.license_number,
-        payment_method: payment_method || activeOrPending.payment_method
+        applicant_name: applicant_name || pendingOrRejected.applicant_name,
+        email: email || pendingOrRejected.email,
+        student_id_num: student_id_num ? student_id_num.trim() : pendingOrRejected.student_id_num,
+        plate_number: plate_number ? plate_number.trim().toUpperCase() : pendingOrRejected.plate_number,
+        vehicle_type: vehicle_type || pendingOrRejected.vehicle_type,
+        vehicle_make: vehicle_make || pendingOrRejected.vehicle_make,
+        or_number: or_number || pendingOrRejected.or_number,
+        cr_number: cr_number || pendingOrRejected.cr_number,
+        license_number: license_number || pendingOrRejected.license_number,
+        status: 'pending_review',
+        rejection_reason: null // Clear previous rejection reason upon resubmission
       };
 
       if (student_id_doc) updateData.student_id_doc = student_id_doc;
       if (or_cr_doc) updateData.or_cr_doc = or_cr_doc;
       if (license_doc) updateData.license_doc = license_doc;
-      if (payment_proof_doc) {
-        updateData.payment_proof_doc = payment_proof_doc;
-        updateData.payment_status = 'paid';
-      }
 
-      stickerModel.updatePendingApplication(activeOrPending.id, updateData, (updErr) => {
+      stickerModel.updatePendingApplication(pendingOrRejected.id, updateData, (updErr) => {
         if (updErr) return handleServerError(res, updErr, 'Failed to update sticker application.');
+
         return res.json({
-          message: 'Vehicle sticker application & payment proof updated successfully!',
-          applicationId: activeOrPending.id,
-          paymentRefNo: activeOrPending.payment_ref_no || payment_ref_no,
-          amount: 200.00
+          message: 'Documents submitted successfully! The OHSO team will review your application and send you an email once verified.',
+          applicationId: pendingOrRejected.id,
+          status: 'pending_review'
         });
       });
       return;
     }
 
-    if (activeOrPending && (activeOrPending.status === 'approved' || activeOrPending.status === 'issued')) {
-      return res.status(400).json({ error: 'You already have an active vehicle sticker valid for 1 year. Renewal will be open once your sticker expires.' });
+    const activeSticker = (existing || []).find(s => {
+      if (s.status === 'expired' || s.status === 'rejected') return false;
+      if ((s.status === 'approved' || s.status === 'paid' || s.status === 'claimed' || s.status === 'issued') && !isWithinOneYear(s.created_at)) {
+        return false;
+      }
+      return s.status === 'approved' || s.status === 'paid' || s.status === 'claimed' || s.status === 'issued';
+    });
+
+    if (activeSticker) {
+      if (activeSticker.status === 'approved' && activeSticker.payment_status !== 'paid') {
+        return res.status(400).json({
+          error: 'Your application has already been approved! Please proceed with payment in your portal.'
+        });
+      }
+      return res.status(400).json({
+        error: 'You already have an active vehicle sticker valid for 1 year.'
+      });
     }
 
     stickerModel.createApplication(applicationData, (createErr, result) => {
       if (createErr) return handleServerError(res, createErr, 'Failed to submit sticker application.');
 
       res.status(201).json({
-        message: 'Vehicle sticker payment & secure document upload successful! Pending OHSO approval.',
+        message: 'Documents submitted successfully! The OHSO team will review your application and send you an email once verified.',
         applicationId: result.insertId,
-        paymentRefNo: payment_ref_no,
-        amount: 200.00
+        status: 'pending_review'
       });
     });
+  });
+};
+
+// 2. PAY FOR APPROVED STICKER (ONLINE PAYMONGO + MANDATORY PROOF UPLOAD)
+const payApprovedSticker = async (req, res) => {
+  const userId = req.user ? req.user.id : null;
+  const { applicationId, payment_method, payment_ref_no, paymongo_session_id } = req.body;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  if (!applicationId) {
+    return res.status(400).json({ error: 'Application ID is required.' });
+  }
+
+  // Handle payment proof upload
+  const files = req.files || {};
+  const payment_proof_doc = files.payment_proof_doc ? encryptAES256(`/uploads/documents/${files.payment_proof_doc[0].filename}`) : null;
+
+  db.query('SELECT * FROM vehicle_stickers WHERE id = ?', [applicationId], async (err, rows) => {
+    if (err) return handleServerError(res, err, 'Database error.');
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found.' });
+    }
+
+    const app = rows[0];
+
+    // Authorization check
+    if (req.user.role !== 'admin' && String(app.user_id) !== String(userId)) {
+      return res.status(403).json({ error: 'Unauthorized to pay for this application.' });
+    }
+
+    // Verify it is approved or resubmitting payment proof
+    if (app.payment_status === 'paid' && (app.status === 'ready_for_release' || app.status === 'claimed' || app.status === 'issued')) {
+      return res.status(400).json({ error: 'This application has already been verified and paid.' });
+    }
+
+    if (app.status !== 'approved' && app.status !== 'payment_submitted' && app.status !== 'payment_held') {
+      return res.status(400).json({ error: 'This application is not ready for payment submission.' });
+    }
+
+    if (!payment_proof_doc && !app.payment_proof_doc) {
+      return res.status(400).json({ error: 'Proof of payment screenshot is required.' });
+    }
+
+    // PayMongo session verification if session_id passed
+    let confirmedRef = payment_ref_no;
+    if (paymongo_session_id) {
+      try {
+        const sessionInfo = await paymongoService.retrieveCheckoutSession(paymongo_session_id);
+        if (sessionInfo && sessionInfo.paymentId) {
+          confirmedRef = sessionInfo.paymentId;
+        }
+      } catch (pmErr) {
+        console.warn('[PAYMONGO VERIFY WARN]:', pmErr.message);
+      }
+    }
+
+    const finalRefNo = confirmedRef || app.payment_ref_no || `PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const finalMethod = payment_method || app.payment_method || 'gcash';
+
+    const updateFields = {
+      payment_method: finalMethod,
+      payment_ref_no: finalRefNo,
+      payment_status: 'pending', // Pending admin verification
+      status: 'payment_submitted',
+      admin_remarks: app.status === 'payment_held'
+        ? 'Payment proof resubmitted by applicant. Awaiting OHSO re-verification.'
+        : (app.admin_remarks || 'Payment proof submitted. Awaiting OHSO verification.'),
+      rejection_reason: null
+    };
+
+    if (payment_proof_doc) {
+      updateFields.payment_proof_doc = payment_proof_doc;
+    }
+
+    stickerModel.updatePendingApplication(app.id, updateFields, (updateErr) => {
+      if (updateErr) return handleServerError(res, updateErr, 'Failed to update payment status.');
+
+      // Dispatch receipt acknowledgement email
+      emailService.sendPaymentConfirmationEmail({
+        toEmail: app.email,
+        applicantName: app.applicant_name,
+        studentIdNum: app.student_id_num,
+        paymentRefNo: finalRefNo,
+        paymentMethod: finalMethod,
+        amountPaid: app.amount || 200.00,
+        vehicleType: app.vehicle_type,
+        vehicleMake: app.vehicle_make,
+        plateNumber: app.plate_number
+      }).catch(e => console.error('[EMAIL RECEIPT WARN]', e.message));
+
+      res.json({
+        message: 'Payment and proof submitted successfully! OHSO admin will verify your payment and prepare your sticker for release.',
+        applicationId: app.id,
+        paymentRefNo: finalRefNo,
+        paymentStatus: 'pending',
+        status: 'payment_submitted'
+      });
+    });
+  });
+};
+
+// 2B. ADMIN VERIFY PAYMENT (Sets to ready_for_release or hold/rejected)
+const verifyPaymentAdmin = (req, res) => {
+  const { id, action, rejection_reason } = req.body; // action: 'approve' | 'reject' | 'hold'
+
+  if (!id || !action) {
+    return res.status(400).json({ error: 'Application ID and action are required.' });
+  }
+
+  db.query('SELECT * FROM vehicle_stickers WHERE id = ?', [id], (err, rows) => {
+    if (err) return handleServerError(res, err, 'Database error.');
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found.' });
+    }
+
+    const app = rows[0];
+
+    if (action === 'approve') {
+      const stickerNumber = app.sticker_number || generateStickerNumber(app.vehicle_type || 'car');
+      const updateData = {
+        payment_status: 'paid',
+        status: 'ready_for_release',
+        sticker_number: stickerNumber,
+        admin_remarks: 'Payment proof verified by OHSO. Sticker is ready for release.'
+      };
+
+      stickerModel.updatePendingApplication(app.id, updateData, (updErr) => {
+        if (updErr) return handleServerError(res, updErr, 'Failed to update payment verification.');
+
+        // Dispatch Ready for Release Email
+        emailService.sendStickerReadyForReleaseEmail({
+          toEmail: app.email,
+          applicantName: app.applicant_name,
+          studentIdNum: app.student_id_num,
+          stickerNumber: stickerNumber,
+          vehicleType: app.vehicle_type,
+          plateNumber: app.plate_number,
+          claimDate: app.claim_date
+        }).catch(e => console.error('[EMAIL READY FOR RELEASE WARN]', e.message));
+
+        res.json({
+          message: 'Payment verified successfully! Sticker is now marked Ready for Release.',
+          stickerNumber,
+          status: 'ready_for_release',
+          paymentStatus: 'paid',
+          applicantName: app.applicant_name
+        });
+      });
+    } else if (action === 'hold' || action === 'reject') {
+      const reason = rejection_reason || 'Payment proof was unclear or invalid. Please re-upload your valid payment receipt.';
+      const updateData = {
+        payment_status: 'pending',
+        status: 'payment_held', // Explicitly marked as payment_held
+        admin_remarks: `Payment verification placed on hold: ${reason}`,
+        rejection_reason: reason
+      };
+
+      stickerModel.updatePendingApplication(app.id, updateData, (updErr) => {
+        if (updErr) return handleServerError(res, updErr, 'Failed to update payment status to hold.');
+
+        // Dispatch Payment Hold Email
+        emailService.sendPaymentHoldEmail({
+          toEmail: app.email,
+          applicantName: app.applicant_name,
+          studentIdNum: app.student_id_num,
+          paymentRefNo: app.payment_ref_no,
+          paymentMethod: app.payment_method,
+          vehicleType: app.vehicle_type,
+          vehicleMake: app.vehicle_make,
+          plateNumber: app.plate_number,
+          holdReason: reason,
+          claimDate: app.claim_date
+        }).catch(e => console.error('[EMAIL PAYMENT HOLD WARN]', e.message));
+
+        res.json({
+          message: 'Payment verification placed on hold. Applicant notified via email.',
+          status: 'payment_held',
+          paymentStatus: 'pending',
+          applicantName: app.applicant_name
+        });
+      });
+    } else {
+      res.status(400).json({ error: 'Invalid action. Must be "approve", "reject", or "hold".' });
+    }
   });
 };
 
@@ -164,6 +352,11 @@ const decryptStickerRows = (rows) => {
 
 const getUserStickers = (req, res) => {
   const userId = req.params.userId;
+
+  if (req.user && req.user.role !== 'admin' && String(req.user.id) !== String(userId)) {
+    return res.status(403).json({ error: 'Access denied: You can only view your own vehicle sticker applications.' });
+  }
+
   stickerModel.getByUserId(userId, (err, results) => {
     if (err) return handleServerError(res, err, 'Failed to fetch user sticker applications.');
     res.json(decryptStickerRows(results));
@@ -178,18 +371,18 @@ const getAllStickersAdmin = (req, res) => {
 };
 
 const updateStickerStatusAdmin = (req, res) => {
-  const { id, status, admin_remarks, vehicle_type } = req.body;
+  const { id, status, admin_remarks, vehicle_type, claim_date, rejection_reason } = req.body;
 
   if (!id || !status) {
     return res.status(400).json({ error: 'Application ID and status are required.' });
   }
 
   let stickerNumber = null;
-  if (status === 'approved' || status === 'issued') {
+  if (status === 'approved' || status === 'issued' || status === 'claimed') {
     stickerNumber = generateStickerNumber(vehicle_type || 'car');
   }
 
-  stickerModel.updateStatus(id, status, stickerNumber, admin_remarks || '', (err, result) => {
+  stickerModel.updateStatus(id, status, stickerNumber, admin_remarks || '', claim_date || null, rejection_reason || null, (err, result) => {
     if (err) return handleServerError(res, err, 'Failed to update sticker application status.');
 
     // Fetch sticker application record to send email notification
@@ -202,14 +395,17 @@ const updateStickerStatusAdmin = (req, res) => {
           status,
           stickerNumber || stk.sticker_number,
           stk.vehicle_type,
-          stk.plate_number
+          stk.plate_number,
+          claim_date || stk.claim_date,
+          rejection_reason || stk.rejection_reason
         ).catch(console.error);
       }
     });
 
     res.json({
       message: `Sticker application ${status} successfully.`,
-      stickerNumber
+      stickerNumber,
+      claim_date: claim_date || null
     });
   });
 };
@@ -240,7 +436,7 @@ const verifyStickerPublic = (req, res) => {
     };
 
     const isExpired = !isWithinOneYear(record.created_at) || record.status === 'expired';
-    const isApprovedOrIssued = record.status === 'approved' || record.status === 'issued';
+    const isApprovedOrIssued = ['approved', 'issued', 'paid', 'claimed', 'ready_for_release'].includes(record.status);
 
     const issueDate = new Date(record.created_at);
     const expireDate = new Date(issueDate);
@@ -258,6 +454,7 @@ const verifyStickerPublic = (req, res) => {
       vehicleMake: record.vehicle_make,
       plateNumber: record.plate_number,
       paymentStatus: record.payment_status,
+      claimDate: record.claim_date,
       issuedAt: record.created_at,
       expiresAt: expireDate.toISOString(),
       verifiedAt: new Date().toISOString()
@@ -265,4 +462,12 @@ const verifyStickerPublic = (req, res) => {
   });
 };
 
-module.exports = { applySticker, getUserStickers, getAllStickersAdmin, updateStickerStatusAdmin, verifyStickerPublic };
+module.exports = {
+  applySticker,
+  payApprovedSticker,
+  verifyPaymentAdmin,
+  getUserStickers,
+  getAllStickersAdmin,
+  updateStickerStatusAdmin,
+  verifyStickerPublic
+};

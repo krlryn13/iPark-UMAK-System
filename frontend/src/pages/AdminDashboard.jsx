@@ -4,25 +4,46 @@ import { useAuth } from '../context/AuthContext';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { DocumentInspectorModal } from '../components/DocumentInspectorModal';
+import StatusBadge from '../components/StatusBadge';
+import { useToast } from '../components/Toast';
 import { useParkingData } from '../hooks/useParkingData';
 import { API_BASE_URL } from '../config/api';
+import { formatDateClean, formatDateShort, formatDateInput } from '../utils/dateUtils';
+import { getStatusConfig, getGuestStatusConfig, getActionMessage } from '../utils/statusConfig';
 
 export const AdminDashboard = () => {
   const { currentUser, logoutUser, loading: authLoading, authFetch } = useAuth();
   const navigate = useNavigate();
   const { lots } = useParkingData();
+  const { showToast, ToastContainer } = useToast();
 
   const [activeAdminTab, setActiveAdminTab] = useState('stickers'); // 'stickers' | 'guests' | 'parking' | 'users'
   const [adminStickers, setAdminStickers] = useState([]);
   const [adminGuestReservations, setAdminGuestReservations] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
-  const [actionMessage, setActionMessage] = useState('');
 
   // Selected application for document inspector modal
   const [inspectApplication, setInspectApplication] = useState(null);
 
 
+
+  // Subtab under stickers: 'docs' | 'payments'
+  const [stickerSubTab, setStickerSubTab] = useState('docs'); // 'docs' | 'payments'
+  const [docFilter, setDocFilter] = useState('all'); // 'all' | 'pending' | 'rejected'
+  const [paymentFilter, setPaymentFilter] = useState('all'); // 'all' | 'needs_verification' | 'ready' | 'unpaid'
+
+  // Approval modal state (to set pickup/claim date)
+  const [approvalModalApp, setApprovalModalApp] = useState(null);
+  const [claimDateInput, setClaimDateInput] = useState('');
+
+  // Rejection modal state (to specify rejection reason)
+  const [rejectionModalApp, setRejectionModalApp] = useState(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+
+  // Payment hold modal state
+  const [paymentHoldModalApp, setPaymentHoldModalApp] = useState(null);
+  const [paymentHoldReasonInput, setPaymentHoldReasonInput] = useState('');
 
   // Fetch admin stickers
   const fetchAdminStickers = async () => {
@@ -33,7 +54,7 @@ export const AdminDashboard = () => {
         const data = await res.json();
         setAdminStickers(data);
       }
-    } catch (e) {}
+    } catch (e) { }
     setLoadingData(false);
   };
 
@@ -45,7 +66,7 @@ export const AdminDashboard = () => {
         const data = await res.json();
         setAdminGuestReservations(data);
       }
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // Fetch admin users for Account Security tab
@@ -56,7 +77,7 @@ export const AdminDashboard = () => {
         const data = await res.json();
         setAdminUsers(data);
       }
-    } catch (e) {}
+    } catch (e) { }
   };
 
   useEffect(() => {
@@ -68,38 +89,112 @@ export const AdminDashboard = () => {
   }, [currentUser]);
 
   const handleGuestStatusUpdate = async (id, status) => {
-    setActionMessage('');
     try {
       const res = await authFetch(`${API_BASE_URL}/api/guests/admin/update-status`, {
         method: 'POST',
         body: JSON.stringify({ id, status, admin_remarks: `OHSO Admin updated status to ${status}` })
       });
       if (res.ok) {
-        setActionMessage(`Guest reservation #${id} status updated to "${status}".`);
+        showToast(
+          getActionMessage(status === 'approved' ? 'approve_guest' : 'reject_guest'),
+          status === 'approved' ? 'success' : 'warning'
+        );
         fetchAdminGuestReservations();
       }
-    } catch (e) {}
+    } catch (e) {
+      showToast('Could not update reservation. Please try again.', 'error');
+    }
   };
 
-  // Admin Approve / Reject Action
-  const handleAdminStatusUpdate = async (id, status, vehicle_type) => {
-    setActionMessage('');
+  // Admin Approve Documents & Set Claim Date
+  const handleConfirmApproval = async () => {
+    if (!approvalModalApp) return;
+    if (!claimDateInput) {
+      showToast('Please select a pickup date before approving.', 'warning');
+      return;
+    }
+
     try {
       const res = await authFetch(`${API_BASE_URL}/api/stickers/admin/update`, {
         method: 'POST',
-        body: JSON.stringify({ id, status, vehicle_type, admin_remarks: `OHSO Admin processed status to ${status}.` })
+        body: JSON.stringify({
+          id: approvalModalApp.id,
+          status: 'approved',
+          vehicle_type: approvalModalApp.vehicle_type,
+          claim_date: claimDateInput,
+          admin_remarks: `OHSO Admin verified documents. Claim date set to ${claimDateInput}.`
+        })
       });
       const data = await res.json();
       if (res.ok) {
-        setActionMessage(`Application #${id} updated to "${status}". ${data.stickerNumber ? `Issued: ${data.stickerNumber}` : ''}`);
+        showToast(getActionMessage('approve_docs', { name: approvalModalApp.applicant_name }), 'success');
+        setApprovalModalApp(null);
+        setClaimDateInput('');
         fetchAdminStickers();
+      } else {
+        showToast(data.error || 'Could not approve this application right now.', 'error');
       }
-    } catch (e) {}
+    } catch (e) {
+      showToast('Connection issue. Please check your network and try again.', 'error');
+    }
+  };
+
+  // Admin Reject Documents
+  const handleConfirmRejection = async () => {
+    if (!rejectionModalApp) return;
+
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/stickers/admin/update`, {
+        method: 'POST',
+        body: JSON.stringify({
+          id: rejectionModalApp.id,
+          status: 'rejected',
+          vehicle_type: rejectionModalApp.vehicle_type,
+          rejection_reason: rejectionReasonInput || 'Documents submitted do not meet requirements.',
+          admin_remarks: `OHSO Admin rejected application: ${rejectionReasonInput}`
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(getActionMessage('reject_docs', { name: rejectionModalApp.applicant_name }), 'warning');
+        setRejectionModalApp(null);
+        setRejectionReasonInput('');
+        fetchAdminStickers();
+      } else {
+        showToast(data.error || 'Could not reject this application right now.', 'error');
+      }
+    } catch (e) {
+      showToast('Connection issue. Please check your network and try again.', 'error');
+    }
+  };
+
+  // Admin Verify Payment & Mark Ready for Release
+  const handleVerifyPayment = async (id, action, rejection_reason = '') => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/stickers/admin/verify-payment`, {
+        method: 'POST',
+        body: JSON.stringify({ id, action, rejection_reason })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (action === 'approve') {
+          showToast(getActionMessage('verify_payment', { name: data.applicantName, stickerNumber: data.stickerNumber }), 'success');
+        } else {
+          showToast(getActionMessage('hold_payment', { name: data.applicantName }), 'warning');
+        }
+        setPaymentHoldModalApp(null);
+        setPaymentHoldReasonInput('');
+        fetchAdminStickers();
+      } else {
+        showToast(data.error || 'Could not process payment verification.', 'error');
+      }
+    } catch (e) {
+      showToast('Connection issue. Please check your network and try again.', 'error');
+    }
   };
 
   // Admin Unlock User Action
   const handleAdminUnlockUser = async (userId, userEmail) => {
-    setActionMessage('');
     try {
       const res = await authFetch(`${API_BASE_URL}/api/auth/admin/unlock-user`, {
         method: 'POST',
@@ -107,13 +202,13 @@ export const AdminDashboard = () => {
       });
       const data = await res.json();
       if (res.ok) {
-        setActionMessage(`Account (${userEmail}) unlocked successfully! Notification email sent.`);
+        showToast(getActionMessage('unlock_user', { email: userEmail }), 'success');
         fetchAdminUsers();
       } else {
-        setActionMessage(`Error: ${data.error || 'Failed to unlock user.'}`);
+        showToast(data.error || 'Could not unlock this account right now.', 'error');
       }
     } catch (e) {
-      setActionMessage('Connection error. Could not unlock user.');
+      showToast('Connection issue. Could not unlock account.', 'error');
     }
   };
 
@@ -130,10 +225,37 @@ export const AdminDashboard = () => {
 
   if (!currentUser || currentUser.role !== 'admin') return null;
 
+  // 1. Phase 1: Document Review (ONLY pending review or rejected - NEVER approved)
+  const docReviewStickers = adminStickers.filter(
+    s => s.status === 'pending_review' || s.status === 'pending' || s.status === 'rejected'
+  );
+
+  const filteredDocStickers = docReviewStickers.filter(s => {
+    if (docFilter === 'pending') return s.status === 'pending_review' || s.status === 'pending';
+    if (docFilter === 'rejected') return s.status === 'rejected';
+    return true;
+  });
+
+  // 2. Phase 2: Payment Verification & Release (ONLY approved documents that moved forward)
+  const paymentReviewStickers = adminStickers.filter(
+    s => s.status !== 'pending_review' && s.status !== 'pending' && s.status !== 'rejected'
+  );
+
+  const filteredPaymentStickers = paymentReviewStickers.filter(s => {
+    if (paymentFilter === 'needs_verification') return s.status === 'payment_submitted';
+    if (paymentFilter === 'held') return s.status === 'payment_held';
+    if (paymentFilter === 'ready') return s.status === 'ready_for_release' || s.status === 'paid' || s.status === 'claimed' || s.status === 'issued';
+    if (paymentFilter === 'unpaid') return s.status === 'approved' && !s.payment_ref_no;
+    return true;
+  });
+
   // Key Metrics Calculation
   const totalStickersApplied = adminStickers.length;
-  const totalApprovedStickers = adminStickers.filter(s => s.status === 'approved' || s.status === 'issued').length;
-  const totalPendingStickers = adminStickers.filter(s => s.status === 'pending').length;
+  const totalApprovedStickers = paymentReviewStickers.filter(s => s.status === 'ready_for_release' || s.status === 'paid' || s.status === 'claimed' || s.status === 'issued').length;
+  const totalPendingDocs = docReviewStickers.filter(s => s.status === 'pending_review' || s.status === 'pending').length;
+  const totalPendingPayments = paymentReviewStickers.filter(s => s.status === 'payment_submitted').length;
+  const totalHeldPayments = paymentReviewStickers.filter(s => s.status === 'payment_held').length;
+  const totalPendingStickers = totalPendingDocs + totalPendingPayments + totalHeldPayments;
   const totalRevenueCollected = totalApprovedStickers * 200.00;
 
   return (
@@ -141,7 +263,7 @@ export const AdminDashboard = () => {
       <Navbar />
 
       <main className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full my-auto space-y-8">
-        
+
         {/* Admin Header Banner */}
         <div className="bg-gradient-to-r from-slate-900 via-umak-navy to-slate-900 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
           <div className="space-y-2 relative z-10">
@@ -177,7 +299,7 @@ export const AdminDashboard = () => {
 
         {/* METRICS STATS BAR WITH PERFECT EQUAL CARD HEIGHTS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
-          
+
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 h-full">
             <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl border border-amber-200 flex-shrink-0">
               <i className="fa-solid fa-clock"></i>
@@ -220,28 +342,16 @@ export const AdminDashboard = () => {
 
         </div>
 
-        {/* Action Alert Message */}
-        {actionMessage && (
-          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center justify-between animate-in fade-in">
-            <span className="flex items-center gap-2">
-              <i className="fa-solid fa-circle-check text-emerald-600"></i>
-              {actionMessage}
-            </span>
-            <button onClick={() => setActionMessage('')} className="text-emerald-700 hover:text-emerald-900">
-              <i className="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-        )}
+
 
         {/* ADMIN TAB NAVIGATION */}
         <div className="flex items-center bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto">
           <button
             onClick={() => setActiveAdminTab('stickers')}
-            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-              activeAdminTab === 'stickers'
+            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${activeAdminTab === 'stickers'
                 ? 'bg-umak-navy text-white shadow-md'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
+              }`}
           >
             <i className="fa-solid fa-id-card text-umak-orange"></i>
             <span>Vehicle Sticker Applications ({totalPendingStickers} Pending)</span>
@@ -249,11 +359,10 @@ export const AdminDashboard = () => {
 
           <button
             onClick={() => setActiveAdminTab('guests')}
-            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-              activeAdminTab === 'guests'
+            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${activeAdminTab === 'guests'
                 ? 'bg-umak-navy text-white shadow-md'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
+              }`}
           >
             <i className="fa-solid fa-calendar-check text-emerald-400"></i>
             <span>Guest & Event Reservations ({adminGuestReservations.filter(g => g.status === 'pending').length} Pending)</span>
@@ -261,11 +370,10 @@ export const AdminDashboard = () => {
 
           <button
             onClick={() => setActiveAdminTab('parking')}
-            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-              activeAdminTab === 'parking'
+            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${activeAdminTab === 'parking'
                 ? 'bg-umak-navy text-white shadow-md'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
+              }`}
           >
             <i className="fa-solid fa-building text-umak-orange"></i>
             <span>HPSB Operations Overview</span>
@@ -273,11 +381,10 @@ export const AdminDashboard = () => {
 
           <button
             onClick={() => setActiveAdminTab('users')}
-            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 relative ${
-              activeAdminTab === 'users'
+            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 relative ${activeAdminTab === 'users'
                 ? 'bg-umak-navy text-white shadow-md'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
+              }`}
           >
             <i className="fa-solid fa-shield-halved text-red-400"></i>
             <span>Account Security & Lockouts</span>
@@ -289,119 +396,433 @@ export const AdminDashboard = () => {
           </button>
         </div>
 
-        {/* ===== SECTION 1: VEHICLE STICKER APPLICATIONS TABLE ===== */}
+        {/* ===== SECTION 1: VEHICLE STICKER APPLICATIONS (PHASE 1 DOCS + PHASE 2 PAYMENT) ===== */}
         {activeAdminTab === 'stickers' && (
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+            
+            {/* Header with Subtabs */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
               <div>
-                <h3 className="text-xl font-bold font-display text-slate-900">Vehicle Sticker Submissions & Document Verification</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Click "Inspect Photos" to view uploaded LTO OR/CR, License, and Student ID documents.</p>
+                <h3 className="text-xl font-bold font-display text-slate-900">Vehicle Sticker Applications Management</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Two-phase verification: Review submitted documents first, then verify payment proof before releasing stickers.</p>
               </div>
 
               <button
                 onClick={fetchAdminStickers}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                <i className="fa-solid fa-rotate-right"></i> Refresh Table
+                <i className="fa-solid fa-rotate-right"></i> Refresh Data
               </button>
             </div>
 
-            <div className="overflow-x-auto touch-scroll">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-600 font-bold uppercase border-b border-slate-200">
-                    <th className="p-3.5 rounded-l-xl">Applicant / ID</th>
-                    <th className="p-3.5">Vehicle Info & Plate</th>
-                    <th className="p-3.5">LTO OR/CR & License</th>
-                    <th className="p-3.5">Uploaded Documents</th>
-                    <th className="p-3.5">Payment Ref (₱200)</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5 rounded-r-xl text-right">OHSO Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {adminStickers.length === 0 ? (
-                    <tr>
-                      <td colSpan="7" className="p-8 text-center text-slate-400">
-                        No sticker applications submitted yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    adminStickers.map((stk) => (
-                      <tr key={stk.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-3.5">
-                          <span className="font-bold text-slate-900 block">{stk.applicant_name}</span>
-                          <span className="text-[11px] text-slate-500 font-mono">{stk.email}</span>
-                          <span className="px-2 py-0.5 rounded bg-slate-100 text-umak-navy font-bold font-mono text-[10px] inline-block mt-1">
-                            {stk.student_id_num}
-                          </span>
-                        </td>
-                        <td className="p-3.5">
-                          <span className="font-bold text-slate-900 font-mono block text-sm">{stk.plate_number}</span>
-                          <span className="text-[11px] text-slate-500 capitalize">{stk.vehicle_make} ({stk.vehicle_type})</span>
-                        </td>
-                        <td className="p-3.5 font-mono text-[11px] text-slate-600">
-                          <div>OR: <strong>{stk.or_number}</strong></div>
-                          <div>CR: <strong>{stk.cr_number}</strong></div>
-                          <div>Lic: <strong>{stk.license_number}</strong></div>
-                        </td>
-                        <td className="p-3.5">
-                          <button
-                            onClick={() => setInspectApplication(stk)}
-                            className="px-3 py-1.5 bg-umak-navy hover:bg-umak-navydark text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer inline-flex items-center gap-1.5"
-                          >
-                            <i className="fa-solid fa-images text-amber-400"></i> Inspect Photos
-                          </button>
-                        </td>
-                        <td className="p-3.5 font-mono">
-                          <span className="font-bold text-emerald-600 block">{stk.payment_ref_no}</span>
-                          <span className="text-[10px] text-slate-500 uppercase">₱200.00 ({stk.payment_method})</span>
-                        </td>
-                        <td className="p-3.5">
-                          <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] border capitalize ${
-                            stk.status === 'approved' || stk.status === 'issued'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : stk.status === 'rejected'
-                                ? 'bg-red-50 text-red-700 border-red-200'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
-                          }`}>
-                            {stk.status}
-                          </span>
-                          {stk.sticker_number && (
-                            <span className="block text-[11px] font-mono text-umak-navy font-bold mt-1.5">
-                              {stk.sticker_number}
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3.5 text-right">
-                          {stk.status === 'pending' && (
-                            <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                              <button
-                                onClick={() => handleAdminStatusUpdate(stk.id, 'approved', stk.vehicle_type)}
-                                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer inline-flex items-center gap-1.5"
-                              >
-                                <i className="fa-solid fa-check text-xs"></i> Approve & Issue
-                              </button>
-                              <button
-                                onClick={() => handleAdminStatusUpdate(stk.id, 'rejected', stk.vehicle_type)}
-                                className="px-3.5 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 border border-red-200"
-                              >
-                                <i className="fa-solid fa-xmark text-xs"></i> Reject
-                              </button>
+            {/* Sub-tab Switcher: Phase 1 (Docs) vs Phase 2 (Payments) */}
+            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-full max-w-xl">
+              <button
+                type="button"
+                onClick={() => setStickerSubTab('docs')}
+                className={`flex-1 py-2.5 px-4 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  stickerSubTab === 'docs'
+                    ? 'bg-white text-umak-navy shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <i className="fa-solid fa-file-shield text-umak-orange"></i>
+                <span>Phase 1: Document Review</span>
+                {totalPendingDocs > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white font-mono text-[10px] font-bold">
+                    {totalPendingDocs}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStickerSubTab('payments')}
+                className={`flex-1 py-2.5 px-4 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  stickerSubTab === 'payments'
+                    ? 'bg-white text-umak-navy shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <i className="fa-solid fa-receipt text-emerald-600"></i>
+                <span>Phase 2: Payment Verification</span>
+                {totalPendingPayments > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-mono text-[10px] font-bold animate-pulse">
+                    {totalPendingPayments}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* SUB-VIEW 1: DOCUMENT REVIEW (PHASE 1 - ONLY PENDING REVIEW OR REJECTED) */}
+            {stickerSubTab === 'docs' && (
+              <div className="space-y-4">
+                {/* Filter Pills for Document Review */}
+                <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Filter</span>
+                  {[
+                    { key: 'all', label: 'All Requests', count: docReviewStickers.length, activeClass: 'bg-umak-navy text-white' },
+                    { key: 'pending', label: 'Awaiting Review', count: docReviewStickers.filter(s => s.status === 'pending_review' || s.status === 'pending').length, activeClass: 'bg-amber-500 text-white' },
+                    { key: 'rejected', label: 'Rejected', count: docReviewStickers.filter(s => s.status === 'rejected').length, activeClass: 'bg-red-600 text-white' },
+                  ].map(f => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setDocFilter(f.key)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                        docFilter === f.key
+                          ? `${f.activeClass} shadow-sm`
+                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {f.label}
+                      <span className={`text-[10px] font-mono opacity-80 ${docFilter === f.key ? '' : 'text-slate-400'}`}>
+                        {f.count}
+                      </span>
+                    </button>
+                  ))}
+                  <span className="text-[11px] text-slate-400 ml-auto hidden sm:inline">
+                    Approved documents move to Phase 2 automatically.
+                  </span>
+                </div>
+
+                {/* Application Cards */}
+                {filteredDocStickers.length === 0 ? (
+                  <div className="text-center py-16 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-300 flex items-center justify-center text-3xl mx-auto mb-4">
+                      <i className="fa-solid fa-file-circle-check" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-700 mb-1">No applications pending review</h4>
+                    <p className="text-xs text-slate-400 max-w-xs mx-auto">All submitted documents have been reviewed. New submissions will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredDocStickers.map((stk) => {
+                      const isDocPending = stk.status === 'pending_review' || stk.status === 'pending';
+
+                      return (
+                        <div
+                          key={stk.id}
+                          className={`admin-app-card bg-white rounded-2xl border p-5 space-y-4 ${
+                            stk.status === 'rejected'
+                              ? 'border-red-200 bg-red-50/20'
+                              : 'border-amber-200 bg-amber-50/10'
+                          }`}
+                        >
+                          {/* Card Header: Applicant + Status + Actions */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            {/* Applicant Info */}
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0 ${
+                                stk.status === 'rejected'
+                                  ? 'bg-red-100 text-red-600'
+                                  : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                {stk.applicant_name?.charAt(0)?.toUpperCase() || '?'}
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-sm font-bold text-slate-900 truncate">{stk.applicant_name}</h4>
+                                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                  <span className="text-[11px] text-slate-500 truncate">{stk.email}</span>
+                                  <span className="text-[10px] font-mono font-bold text-umak-navy bg-slate-100 px-1.5 py-0.5 rounded">
+                                    {stk.student_id_num}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Status Badge + Actions */}
+                            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                              <StatusBadge status={stk.status} variant="short" pulse={isDocPending} />
+
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setApprovalModalApp(stk);
+                                    const defDate = new Date();
+                                    defDate.setDate(defDate.getDate() + 3);
+                                    setClaimDateInput(formatDateInput(defDate));
+                                  }}
+                                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                                >
+                                  <i className="fa-solid fa-calendar-check text-[10px]" /> Approve & Schedule
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setRejectionModalApp(stk);
+                                    setRejectionReasonInput('');
+                                  }}
+                                  className="px-3 py-2 bg-white hover:bg-red-50 text-red-600 font-bold text-xs rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5 border border-red-200"
+                                >
+                                  <i className="fa-solid fa-xmark text-[10px]" /> Reject
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Rejection reason if present */}
+                          {stk.rejection_reason && (
+                            <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-100 rounded-xl">
+                              <i className="fa-solid fa-circle-info text-red-400 text-xs mt-0.5 flex-shrink-0" />
+                              <p className="text-xs text-red-700 leading-relaxed">
+                                <span className="font-bold">Previous rejection:</span> {stk.rejection_reason}
+                              </p>
                             </div>
                           )}
-                          {(stk.status === 'approved' || stk.status === 'issued') && (
-                            <span className="text-xs text-emerald-600 font-bold inline-flex items-center gap-1">
-                              <i className="fa-solid fa-circle-check"></i> Sticker Active
-                            </span>
+
+                          {/* Card Body: Details Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-slate-100">
+                            {/* Vehicle */}
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Vehicle</p>
+                              <p className="text-sm font-bold font-mono text-slate-900">{stk.plate_number}</p>
+                              <p className="text-[11px] text-slate-500 capitalize">{stk.vehicle_make} • {stk.vehicle_type}</p>
+                            </div>
+
+                            {/* LTO Numbers */}
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">LTO Records</p>
+                              <div className="space-y-0.5 text-[11px] font-mono text-slate-700">
+                                <p>OR: <span className="font-bold text-slate-900">{stk.or_number}</span></p>
+                                <p>CR: <span className="font-bold text-slate-900">{stk.cr_number}</span></p>
+                              </div>
+                            </div>
+
+                            {/* License */}
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">License No.</p>
+                              <p className="text-sm font-bold font-mono text-slate-900">{stk.license_number}</p>
+                            </div>
+
+                            {/* Documents */}
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Documents</p>
+                              <button
+                                onClick={() => setInspectApplication(stk)}
+                                className="px-3 py-1.5 bg-umak-navy hover:bg-umak-navydark text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                              >
+                                <i className="fa-solid fa-images text-amber-400" /> Inspect All Docs
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB-VIEW 2: PAYMENT VERIFICATION (PHASE 2 - ONLY APPROVED DOCS) */}
+            {stickerSubTab === 'payments' && (
+              <div className="space-y-4">
+                {/* Filter Pills for Payment Stage */}
+                <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Filter</span>
+                  {[
+                    { key: 'all', label: 'All', count: paymentReviewStickers.length, activeClass: 'bg-umak-navy text-white' },
+                    { key: 'needs_verification', label: 'Proof Submitted', count: totalPendingPayments, activeClass: 'bg-amber-500 text-white', pulse: totalPendingPayments > 0 },
+                    { key: 'held', label: 'On Hold', count: totalHeldPayments, activeClass: 'bg-amber-600 text-white', pulse: totalHeldPayments > 0 },
+                    { key: 'ready', label: 'Verified & Ready', count: paymentReviewStickers.filter(s => s.status === 'ready_for_release' || s.status === 'paid' || s.status === 'claimed' || s.status === 'issued').length, activeClass: 'bg-emerald-600 text-white' },
+                    { key: 'unpaid', label: 'Awaiting Payment', count: paymentReviewStickers.filter(s => s.status === 'approved' && !s.payment_ref_no).length, activeClass: 'bg-slate-600 text-white' },
+                  ].map(f => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setPaymentFilter(f.key)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                        paymentFilter === f.key
+                          ? `${f.activeClass} shadow-sm`
+                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {f.label}
+                      <span className={`text-[10px] font-mono opacity-80 ${paymentFilter === f.key ? '' : 'text-slate-400'}`}>
+                        {f.count}
+                      </span>
+                      {f.pulse && paymentFilter !== f.key && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Application Cards */}
+                {filteredPaymentStickers.length === 0 ? (
+                  <div className="text-center py-16 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-300 flex items-center justify-center text-3xl mx-auto mb-4">
+                      <i className="fa-solid fa-receipt" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-700 mb-1">No applications match this filter</h4>
+                    <p className="text-xs text-slate-400 max-w-xs mx-auto">Applications appear here after their documents are approved in Phase 1.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredPaymentStickers.map((stk) => {
+                      const isPaymentPending = stk.status === 'payment_submitted';
+                      const isPaymentHeld = stk.status === 'payment_held';
+                      const isReadyForRelease = stk.status === 'ready_for_release' || stk.status === 'paid' || stk.status === 'claimed' || stk.status === 'issued';
+                      const isAwaitingPayment = stk.status === 'approved' && !stk.payment_ref_no;
+
+                      return (
+                        <div
+                          key={stk.id}
+                          className={`admin-app-card bg-white rounded-2xl border p-5 space-y-4 ${
+                            isPaymentPending
+                              ? 'border-amber-200 bg-amber-50/20'
+                              : isPaymentHeld
+                                ? 'border-amber-300 bg-amber-50/30'
+                                : isReadyForRelease
+                                  ? 'border-emerald-200 bg-emerald-50/20'
+                                  : 'border-slate-200'
+                          }`}
+                        >
+                          {/* Card Header: Applicant + Status + Actions */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            {/* Applicant Info */}
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-10 h-10 rounded-xl bg-umak-navy/10 text-umak-navy flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                {stk.applicant_name?.charAt(0)?.toUpperCase() || '?'}
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-sm font-bold text-slate-900 truncate">{stk.applicant_name}</h4>
+                                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                  <span className="text-[11px] text-slate-500 truncate">{stk.email}</span>
+                                  <span className="text-[10px] font-mono font-bold text-umak-navy bg-slate-100 px-1.5 py-0.5 rounded">
+                                    {stk.student_id_num}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Status Badge + Actions */}
+                            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                              <StatusBadge status={stk.status} variant="short" pulse={isPaymentPending} />
+
+                              {isPaymentPending && (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => handleVerifyPayment(stk.id, 'approve')}
+                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                                  >
+                                    <i className="fa-solid fa-check-double text-[10px]" /> Verify & Release
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setPaymentHoldModalApp(stk);
+                                      setPaymentHoldReasonInput(stk.rejection_reason || '');
+                                    }}
+                                    className="px-3 py-2 bg-white hover:bg-red-50 text-red-600 font-bold text-xs rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5 border border-red-200"
+                                  >
+                                    <i className="fa-solid fa-hand text-[10px]" /> Hold
+                                  </button>
+                                </div>
+                              )}
+                              {isPaymentHeld && (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => handleVerifyPayment(stk.id, 'approve')}
+                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                                  >
+                                    <i className="fa-solid fa-check-double text-[10px]" /> Verify & Release
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setPaymentHoldModalApp(stk);
+                                      setPaymentHoldReasonInput(stk.rejection_reason || '');
+                                    }}
+                                    className="px-3 py-2 bg-white hover:bg-amber-50 text-amber-700 font-bold text-xs rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5 border border-amber-300"
+                                  >
+                                    <i className="fa-solid fa-pen text-[10px]" /> Edit Hold Note
+                                  </button>
+                                </div>
+                              )}
+                              {isReadyForRelease && (
+                                <span className="text-xs text-emerald-600 font-bold inline-flex items-center gap-1.5">
+                                  <i className="fa-solid fa-circle-check" /> Released
+                                </span>
+                              )}
+                              {isAwaitingPayment && (
+                                <span className="text-xs text-slate-400 font-semibold inline-flex items-center gap-1.5">
+                                  <i className="fa-solid fa-clock" /> Awaiting Payment
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Card Body: Details Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-slate-100">
+                            {/* Vehicle */}
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Vehicle</p>
+                              <p className="text-sm font-bold font-mono text-slate-900">{stk.plate_number}</p>
+                              <p className="text-[11px] text-slate-500 capitalize">{stk.vehicle_make} • {stk.vehicle_type}</p>
+                            </div>
+
+                            {/* Payment Info */}
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment</p>
+                              {stk.payment_ref_no ? (
+                                <>
+                                  <p className="text-xs font-bold text-slate-800 font-mono break-all">{stk.payment_ref_no}</p>
+                                  <p className="text-[11px] text-emerald-600 font-bold">₱200.00 via {stk.payment_method?.toUpperCase() || 'PayMongo'}</p>
+                                </>
+                              ) : (
+                                <p className="text-xs text-slate-400 italic">No payment yet</p>
+                              )}
+                            </div>
+
+                            {/* Claim Date */}
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pickup Date</p>
+                              {stk.claim_date ? (
+                                <p className="text-sm font-bold text-umak-navy">{formatDateClean(stk.claim_date)}</p>
+                              ) : (
+                                <p className="text-xs text-slate-400 italic">Not scheduled</p>
+                              )}
+                            </div>
+
+                            {/* Sticker / Proof */}
+                            <div className="flex flex-col gap-2">
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                  {isReadyForRelease ? 'Sticker No.' : 'Proof'}
+                                </p>
+                                {isReadyForRelease && stk.sticker_number ? (
+                                  <p className="text-sm font-bold font-mono text-emerald-700">{stk.sticker_number}</p>
+                                ) : stk.payment_proof_doc ? (
+                                  <button
+                                    onClick={() => setInspectApplication(stk)}
+                                    className="px-3 py-1.5 bg-slate-100 hover:bg-umak-navy hover:text-white text-slate-700 font-bold text-[11px] rounded-lg transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                  >
+                                    <i className="fa-solid fa-image text-umak-orange" /> View Proof
+                                  </button>
+                                ) : (
+                                  <p className="text-xs text-slate-400 italic">No proof</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Hold Feedback Notice */}
+                          {isPaymentHeld && stk.rejection_reason && (
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs flex items-start gap-2.5">
+                              <i className="fa-solid fa-hand text-amber-600 text-sm mt-0.5 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <span className="font-extrabold text-amber-900 uppercase tracking-wide text-[10px]">Payment Proof On Hold:</span>
+                                <p className="text-amber-900 font-semibold mt-0.5">{stk.rejection_reason}</p>
+                                <p className="text-[10px] text-amber-700 mt-1">Applicant has been notified via email and can re-upload their proof directly from their dashboard.</p>
+                              </div>
+                            </div>
                           )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         )}
 
@@ -466,15 +887,15 @@ export const AdminDashboard = () => {
                           <span className="text-[11px] font-mono text-slate-500">{gst.point_person_contact}</span>
                         </td>
                         <td className="p-3.5">
-                          <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] border capitalize ${
-                            gst.status === 'approved'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : gst.status === 'rejected'
-                                ? 'bg-red-50 text-red-700 border-red-200'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
-                          }`}>
-                            {gst.status}
-                          </span>
+                          {(() => {
+                            const gsc = getGuestStatusConfig(gst.status);
+                            return (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold text-[11px] border ${gsc.palette.bg} ${gsc.palette.text} ${gsc.palette.border}`}>
+                                <i className={`${gsc.icon} text-[10px]`} />
+                                {gsc.label}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="p-3.5 text-right">
                           {gst.status === 'pending' && (
@@ -607,11 +1028,10 @@ export const AdminDashboard = () => {
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <span className={`px-2.5 py-0.5 rounded font-extrabold text-[10px] uppercase ${
-                              u.role === 'admin'
+                            <span className={`px-2.5 py-0.5 rounded font-extrabold text-[10px] uppercase ${u.role === 'admin'
                                 ? 'bg-umak-navy text-white'
                                 : 'bg-slate-100 text-slate-700 border border-slate-200'
-                            }`}>
+                              }`}>
                               {u.role}
                             </span>
                           </td>
@@ -680,12 +1100,256 @@ export const AdminDashboard = () => {
 
       <Footer />
 
+      {/* APPROVAL & CLAIM DATE MODAL */}
+      {approvalModalApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md" onClick={() => setApprovalModalApp(null)}>
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full shadow-2xl animate-in fade-in zoom-in" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex justify-between items-center p-6 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <i className="fa-solid fa-calendar-check" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Approve & Schedule Pickup</h3>
+                  <p className="text-[11px] text-slate-400">Documents verified — set the pickup date</p>
+                </div>
+              </div>
+              <button onClick={() => setApprovalModalApp(null)} className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors cursor-pointer">
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5">
+              {/* Applicant Summary Card */}
+              <div className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="w-9 h-9 rounded-lg bg-umak-navy/10 text-umak-navy flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  {approvalModalApp.applicant_name?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-900 truncate">{approvalModalApp.applicant_name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {approvalModalApp.plate_number} • {approvalModalApp.vehicle_make} ({approvalModalApp.vehicle_type})
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Once approved, the applicant will receive an email notification with their scheduled pickup date and a link to pay ₱200 online.
+              </p>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 block">Sticker Pickup Date</label>
+                <input
+                  type="date"
+                  value={claimDateInput}
+                  onChange={(e) => setClaimDateInput(e.target.value)}
+                  min={formatDateInput(new Date())}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                />
+                <p className="text-[10px] text-slate-400">When should they visit OHSO Ground Floor to claim their sticker?</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-2 p-6 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setApprovalModalApp(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmApproval}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <i className="fa-solid fa-check text-[10px]" /> Approve & Notify
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REJECTION REASON MODAL */}
+      {rejectionModalApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md" onClick={() => setRejectionModalApp(null)}>
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full shadow-2xl animate-in fade-in zoom-in" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex justify-between items-center p-6 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
+                  <i className="fa-solid fa-circle-xmark" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Reject Application</h3>
+                  <p className="text-[11px] text-slate-400">Return for corrections — applicant will be notified</p>
+                </div>
+              </div>
+              <button onClick={() => setRejectionModalApp(null)} className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors cursor-pointer">
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5">
+              {/* Applicant Summary Card */}
+              <div className="flex items-center gap-3 p-3.5 bg-red-50 border border-red-100 rounded-xl">
+                <div className="w-9 h-9 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  {rejectionModalApp.applicant_name?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-900 truncate">{rejectionModalApp.applicant_name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {rejectionModalApp.plate_number} • {rejectionModalApp.vehicle_make}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick reason chips */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 block">Quick Reasons</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Expired LTO OR/CR',
+                    'Blurred document photo',
+                    'Plate number mismatch',
+                    'Incomplete documents',
+                    'Invalid license',
+                  ].map((reason) => (
+                    <button
+                      key={reason}
+                      type="button"
+                      onClick={() => setRejectionReasonInput(prev => prev ? `${prev}, ${reason.toLowerCase()}` : reason)}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-red-50 hover:text-red-700 text-slate-600 text-[11px] font-semibold rounded-lg border border-slate-200 hover:border-red-200 transition-colors cursor-pointer"
+                    >
+                      {reason}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-slate-700">Rejection Reason</label>
+                  <span className={`text-[10px] font-mono ${rejectionReasonInput.length > 200 ? 'text-red-500' : 'text-slate-400'}`}>
+                    {rejectionReasonInput.length}/200
+                  </span>
+                </div>
+                <textarea
+                  rows={3}
+                  value={rejectionReasonInput}
+                  onChange={(e) => setRejectionReasonInput(e.target.value)}
+                  placeholder="Explain what needs to be corrected so the applicant can resubmit..."
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all resize-none leading-relaxed"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-2 p-6 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setRejectionModalApp(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRejection}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md shadow-red-600/20 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <i className="fa-solid fa-xmark text-[10px]" /> Reject & Notify
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENT HOLD / REJECT MODAL */}
+      {paymentHoldModalApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md" onClick={() => setPaymentHoldModalApp(null)}>
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full shadow-2xl animate-in fade-in zoom-in" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex justify-between items-center p-6 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                  <i className="fa-solid fa-hand" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Hold Payment</h3>
+                  <p className="text-[11px] text-slate-400">Payment proof needs clarification</p>
+                </div>
+              </div>
+              <button onClick={() => setPaymentHoldModalApp(null)} className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors cursor-pointer">
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5">
+              {/* Applicant Summary Card */}
+              <div className="flex items-center gap-3 p-3.5 bg-amber-50 border border-amber-100 rounded-xl">
+                <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  {paymentHoldModalApp.applicant_name?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-900 truncate">{paymentHoldModalApp.applicant_name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    Ref: {paymentHoldModalApp.payment_ref_no || 'N/A'} • {paymentHoldModalApp.payment_method?.toUpperCase() || 'Unknown'}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                The applicant's sticker will remain on hold until they upload a valid payment receipt. They'll receive an email with your feedback.
+              </p>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 block">Hold Reason / Feedback</label>
+                <textarea
+                  rows={3}
+                  value={paymentHoldReasonInput}
+                  onChange={(e) => setPaymentHoldReasonInput(e.target.value)}
+                  placeholder="e.g. Receipt is unreadable, reference number doesn't match, or amount is incorrect..."
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all resize-none leading-relaxed"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-2 p-6 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPaymentHoldModalApp(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleVerifyPayment(paymentHoldModalApp.id, 'hold', paymentHoldReasonInput)}
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <i className="fa-solid fa-hand text-[10px]" /> Place on Hold
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* UPLOADED DOCUMENTS INSPECTOR MODAL */}
       <DocumentInspectorModal
         isOpen={Boolean(inspectApplication)}
         onClose={() => setInspectApplication(null)}
         application={inspectApplication}
       />
+
+      {/* TOAST NOTIFICATIONS */}
+      <ToastContainer />
     </div>
   );
 };

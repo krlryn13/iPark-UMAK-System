@@ -4,18 +4,18 @@ const userModel = require('../models/userModel');
 const { sendVerificationEmail } = require('../services/emailService');
 const { validatePassword } = require('../utils/passwordValidator');
 const { handleServerError } = require('../utils/errorHandler');
+const { encryptAES256, decryptAES256 } = require('../utils/encryption');
 
 const UMAK_DOMAIN = '@umak.edu.ph';
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
 const JWT_SECRET = process.env.JWT_SECRET || 'ipark_umak_2026_s3cr3t_jwt_key_x7k2m9';
 
-// Helper to generate 6-digit verification code
+
 const generateVerificationCode = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// GET /api/auth/me — Validate token and return user data
 const getMe = (req, res) => {
     userModel.findById(req.user.id, (err, results) => {
         if (err) return handleServerError(res, err, 'Failed to fetch user profile.');
@@ -47,8 +47,8 @@ const register = (req, res) => {
 
     // Enforce @umak.edu.ph domain
     if (!cleanEmail.endsWith(UMAK_DOMAIN)) {
-        return res.status(400).json({ 
-            error: `Registration restricted: You must use an official ${UMAK_DOMAIN} email address (e.g. k12345678@umak.edu.ph).` 
+        return res.status(400).json({
+            error: `Registration restricted: You must use an official ${UMAK_DOMAIN} email address (e.g. k12345678@umak.edu.ph).`
         });
     }
 
@@ -71,7 +71,7 @@ const register = (req, res) => {
             } else {
                 // User exists but not verified yet: resend new code
                 const newCode = generateVerificationCode();
-                userModel.updateVerificationCode(cleanEmail, newCode, async (updErr) => {
+                userModel.updateVerificationCode(cleanEmail, encryptAES256(newCode), async (updErr) => {
                     if (updErr) return handleServerError(res, updErr, 'Failed to update verification code.');
                     try {
                         await sendVerificationEmail(cleanEmail, existingUser.name, newCode);
@@ -92,12 +92,12 @@ const register = (req, res) => {
             const hashedPassword = await bcrypt.hash(password, 10);
             const vCode = generateVerificationCode();
 
-            userModel.createUser({ 
-                name: name.trim(), 
-                email: cleanEmail, 
-                password: hashedPassword, 
+            userModel.createUser({
+                name: name.trim(),
+                email: cleanEmail,
+                password: hashedPassword,
                 role: userRole,
-                verification_code: vCode,
+                verification_code: encryptAES256(vCode),
                 is_verified: 0
             }, async (err, result) => {
                 if (err) return handleServerError(res, err, 'Account creation failed. Email address may already be registered.');
@@ -153,7 +153,7 @@ const verifyCode = (req, res) => {
         }
 
         // 2. Incorrect code attempt handling
-        if (user.verification_code !== cleanCode) {
+        if (decryptAES256(user.verification_code) !== cleanCode) {
             const currentFailed = (user.failed_login_attempts || 0) + 1;
 
             if (currentFailed >= 3) {
@@ -169,7 +169,7 @@ const verifyCode = (req, res) => {
                 });
             } else {
                 // Increment failed attempts count
-                userModel.incrementFailedAttempts(cleanEmail, () => {});
+                userModel.incrementFailedAttempts(cleanEmail, () => { });
                 const attemptsRemaining = 3 - currentFailed;
                 return res.status(400).json({
                     error: `Invalid 6-digit verification code. Failed attempt (${currentFailed}/3). ${attemptsRemaining} attempt(s) remaining before security timeout lock.`
@@ -178,14 +178,14 @@ const verifyCode = (req, res) => {
         }
 
         // 3. Code matches! Reset failed attempts and verify user
-        userModel.resetFailedAttempts(cleanEmail, () => {});
+        userModel.resetFailedAttempts(cleanEmail, () => { });
 
-        userModel.verifyUserCode(cleanEmail, cleanCode, (verErr) => {
+        userModel.verifyUserCode(cleanEmail, (verErr) => {
             if (verErr) return handleServerError(res, verErr, 'Account verification failed.');
 
             const userData = { id: user.id, name: user.name, email: user.email, role: user.role, is_verified: 1 };
             const token = jwt.sign(
-                { id: user.id, email: user.email, role: user.role },
+                { id: user.id, name: user.name, email: user.email, role: user.role },
                 JWT_SECRET,
                 { expiresIn: '24h' }
             );
@@ -213,7 +213,7 @@ const resendCode = (req, res) => {
 
         const userName = results[0].name || 'Heron';
 
-        userModel.updateVerificationCode(cleanEmail, newCode, async (err) => {
+        userModel.updateVerificationCode(cleanEmail, encryptAES256(newCode), async (err) => {
             if (err) return handleServerError(res, err, 'Code update failed.');
             try {
                 await sendVerificationEmail(cleanEmail, userName, newCode);
@@ -241,8 +241,8 @@ const login = (req, res) => {
 
     // Enforce @umak.edu.ph domain check
     if (!cleanEmail.endsWith(UMAK_DOMAIN)) {
-        return res.status(400).json({ 
-            error: `Invalid email domain: Only official ${UMAK_DOMAIN} accounts can access iPark UMAK.` 
+        return res.status(400).json({
+            error: `Invalid email domain: Only official ${UMAK_DOMAIN} accounts can access iPark UMAK.`
         });
     }
 
@@ -267,7 +267,7 @@ const login = (req, res) => {
                 });
             }
             // Lock has expired — reset it
-            userModel.resetFailedAttempts(cleanEmail, () => {});
+            userModel.resetFailedAttempts(cleanEmail, () => { });
         }
 
         try {
@@ -278,7 +278,7 @@ const login = (req, res) => {
 
                 if (newAttempts >= MAX_FAILED_ATTEMPTS) {
                     // Lock the account
-                    userModel.lockAccount(cleanEmail, LOCKOUT_MINUTES, () => {});
+                    userModel.lockAccount(cleanEmail, LOCKOUT_MINUTES, () => { });
                     return res.status(423).json({
                         error: `Account locked for ${LOCKOUT_MINUTES} minutes due to ${MAX_FAILED_ATTEMPTS} consecutive failed login attempts. You can request OHSO Admin to unlock it.`,
                         isLocked: true,
@@ -287,7 +287,7 @@ const login = (req, res) => {
                     });
                 }
 
-                userModel.incrementFailedAttempts(cleanEmail, () => {});
+                userModel.incrementFailedAttempts(cleanEmail, () => { });
                 const remaining = MAX_FAILED_ATTEMPTS - newAttempts;
                 return res.status(401).json({
                     error: `Incorrect password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before account lockout.`
@@ -295,20 +295,20 @@ const login = (req, res) => {
             }
 
             // Successful login — reset failed attempts
-            userModel.resetFailedAttempts(cleanEmail, () => {});
+            userModel.resetFailedAttempts(cleanEmail, () => { });
 
             // Check if user is verified
             if (user.is_verified === 0) {
                 // Generate new code and send via email only — NEVER expose code in response
                 const newCode = generateVerificationCode();
-                userModel.updateVerificationCode(cleanEmail, newCode, async () => {
+                userModel.updateVerificationCode(cleanEmail, encryptAES256(newCode), async () => {
                     try {
                         await sendVerificationEmail(cleanEmail, user.name, newCode);
                     } catch (mailErr) {
                         console.error('[EMAIL ERROR]', mailErr.message);
                     }
                 });
-                return res.status(403).json({ 
+                return res.status(403).json({
                     error: 'Your account is not verified yet. A new verification code has been sent to your email.',
                     requiresVerification: true,
                     email: cleanEmail
@@ -317,8 +317,8 @@ const login = (req, res) => {
 
             const userData = { id: user.id, name: user.name, email: user.email, role: user.role, is_verified: 1 };
             const token = jwt.sign(
-                { id: user.id, email: user.email, role: user.role },
-                process.env.JWT_SECRET,
+                { id: user.id, name: user.name, email: user.email, role: user.role },
+                JWT_SECRET,
                 { expiresIn: '24h' }
             );
 
@@ -423,7 +423,7 @@ const forgotPassword = (req, res) => {
         const resetOtp = generateVerificationCode();
 
         // Save OTP with 15-minute expiration
-        userModel.setResetOtp(cleanEmail, resetOtp, 15, async (updErr) => {
+        userModel.setResetOtp(cleanEmail, encryptAES256(resetOtp), 15, async (updErr) => {
             if (updErr) return handleServerError(res, updErr, 'Failed to generate reset OTP.');
 
             const { sendPasswordResetEmail } = require('../services/emailService');
@@ -458,7 +458,7 @@ const verifyResetOtp = (req, res) => {
 
         const user = results[0];
 
-        if (!user.reset_otp || user.reset_otp !== cleanOtp) {
+        if (!user.reset_otp || decryptAES256(user.reset_otp) !== cleanOtp) {
             return res.status(400).json({ error: 'Invalid 6-digit reset code. Please check and try again.' });
         }
 
@@ -498,10 +498,12 @@ const resetPassword = async (req, res) => {
         if (err) return handleServerError(res, err, 'Reset password error.');
         if (results.length === 0) return res.status(404).json({ error: 'User account not found.' });
 
-        const user = results[0];
-
-        if (!user.reset_otp || user.reset_otp !== cleanOtp) {
+        if (!user.reset_otp || decryptAES256(user.reset_otp) !== cleanOtp) {
             return res.status(400).json({ error: 'Invalid or expired reset code.' });
+        }
+
+        if (user.reset_otp_expires && new Date(user.reset_otp_expires) < new Date()) {
+            return res.status(400).json({ error: 'Reset code has expired. Please request a new one.' });
         }
 
         try {
@@ -526,17 +528,20 @@ const googleLogin = async (req, res) => {
     let googleName = '';
 
     try {
-        if (idToken || token) {
-            const { verifyGoogleToken } = require('../utils/googleAuth');
-            const googleProfile = await verifyGoogleToken(idToken || token);
-            googleEmail = googleProfile.email;
-            googleName = googleProfile.name;
-        } else if (rawUser && rawUser.email) {
-            googleEmail = rawUser.email;
-            googleName = rawUser.name;
-        } else {
-            return res.status(400).json({ error: 'Google OAuth token or user payload is required.' });
+        const authToken = idToken || token;
+        if (!authToken) {
+            return res.status(400).json({ error: 'Google authentication token is required.' });
         }
+
+        const { verifyGoogleToken } = require('../utils/googleAuth');
+        const googleProfile = await verifyGoogleToken(authToken);
+
+        if (!googleProfile || !googleProfile.email) {
+            return res.status(401).json({ error: 'Failed to verify Google account profile.' });
+        }
+
+        googleEmail = googleProfile.email;
+        googleName = googleProfile.name || (rawUser && rawUser.name) || '';
 
         const cleanEmail = googleEmail.trim().toLowerCase();
 
@@ -566,7 +571,7 @@ const googleLogin = async (req, res) => {
                 // If account exists but is not verified yet, send OTP code to email
                 if (!user.is_verified) {
                     const verificationCode = generateVerificationCode();
-                    userModel.updateVerificationCode(cleanEmail, verificationCode, async () => {
+                    userModel.updateVerificationCode(cleanEmail, encryptAES256(verificationCode), async () => {
                         try {
                             await sendVerificationEmail(cleanEmail, user.name, verificationCode);
                         } catch (mErr) {
@@ -582,7 +587,7 @@ const googleLogin = async (req, res) => {
                 }
 
                 // Reset failed attempts & issue JWT for verified user
-                userModel.resetFailedAttempts(cleanEmail, () => {});
+                userModel.resetFailedAttempts(cleanEmail, () => { });
 
                 const jwtToken = jwt.sign(
                     { id: user.id, name: user.name, email: user.email, role: user.role },
@@ -626,13 +631,13 @@ const googleLogin = async (req, res) => {
                 const userRole = (inputRole && (inputRole.toLowerCase() === 'faculty' || inputRole.toLowerCase() === 'staff')) ? 'faculty' : 'student';
                 const hashedPassword = await bcrypt.hash(inputPassword, 10);
                 const verificationCode = generateVerificationCode();
-                
+
                 const newUserData = {
                     name: googleName || cleanEmail.split('@')[0],
                     email: cleanEmail,
                     password: hashedPassword,
                     role: userRole,
-                    verification_code: verificationCode,
+                    verification_code: encryptAES256(verificationCode),
                     is_verified: 0
                 };
 

@@ -1,12 +1,4 @@
-/**
- * Rate Limiter Middleware
- * Tiered rate limiting to prevent brute force attacks and API abuse.
- * 
- * Exports:
- *   globalLimiter  — 100 requests / 15 min per IP (all API routes)
- *   authLimiter    — 5 attempts / 15 min per IP (login, register, verify)
- *   resendLimiter  — 3 attempts / 15 min per IP (resend verification code)
- */
+
 
 const rateLimit = require('express-rate-limit');
 

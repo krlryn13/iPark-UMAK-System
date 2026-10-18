@@ -7,6 +7,8 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { ScrollToTop } from './components/ScrollToTop';
 import ProtectedRoute from './components/ProtectedRoute';
 
+import { VerifyStickerPage } from './pages/VerifyStickerPage';
+
 function App() {
   return (
     <>
@@ -14,6 +16,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/verify-sticker" element={<VerifyStickerPage />} />
         <Route path="/dashboard" element={
           <ProtectedRoute>
             <Dashboard />

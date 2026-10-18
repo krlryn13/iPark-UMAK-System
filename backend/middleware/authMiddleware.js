@@ -1,9 +1,4 @@
-/**
- * JWT Authentication & Role-Based Access Control Middleware
- * 
- * authenticateToken — Verifies JWT from Authorization header, attaches req.user
- * requireRole(role) — Ensures req.user has the required role
- */
+
 
 const jwt = require('jsonwebtoken');
 
@@ -21,6 +16,7 @@ const authenticateToken = (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = {
             id: decoded.id,
+            name: decoded.name || '',
             email: decoded.email,
             role: decoded.role
         };

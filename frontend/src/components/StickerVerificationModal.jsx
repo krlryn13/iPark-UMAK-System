@@ -93,13 +93,23 @@ export default function StickerVerificationModal({ isOpen, onClose, identifier }
                     } text-2xl`}
                   ></i>
                   <span className="font-extrabold text-base tracking-wide">
-                    {verificationData.isValid ? 'VALID OFFICIAL STICKER' : 'EXPIRED / INVALID STICKER'}
+                    {verificationData.isValid
+                      ? verificationData.status === 'ready_for_release'
+                        ? 'VALID OFFICIAL STICKER (READY FOR PICKUP)'
+                        : 'VALID OFFICIAL STICKER'
+                      : verificationData.isExpired
+                      ? 'EXPIRED VEHICLE STICKER'
+                      : 'PENDING CLEARANCE / UNVERIFIED'}
                   </span>
                 </div>
                 <p className="text-[11px] opacity-80">
                   {verificationData.isValid
-                    ? 'Official Vehicle Pass Approved by OHSO Admin'
-                    : 'Sticker has expired or is pending clearance'}
+                    ? verificationData.status === 'ready_for_release'
+                      ? 'Payment verified & approved by OHSO Security. Hologram sticker ready for pickup.'
+                      : 'Official Vehicle Pass Approved by OHSO Admin. Authorized Campus Parking.'
+                    : verificationData.isExpired
+                    ? 'This vehicle sticker has passed its 1-year validity period.'
+                    : 'Sticker application is pending OHSO review or payment verification.'}
                 </p>
               </div>
 

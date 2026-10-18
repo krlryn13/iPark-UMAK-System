@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import StickerVerificationModal from '../StickerVerificationModal';
+import { formatDateClean } from '../../utils/dateUtils';
 
 /**
  * Step 3 Component: Official Digital E-Receipt & OHSO Pickup Guide
@@ -13,26 +14,54 @@ export const StickerReceiptStep3 = ({
 
   if (!receiptData) return null;
 
-  const refNo = receiptData.refNo || receiptData.payment_ref_no;
-  const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+  const refNo = receiptData.refNo || receiptData.payment_ref_no || 'PAY-VERIFIED';
+  const amountNumber = Number(receiptData.amount || 200.00);
+  const applicantName = receiptData.applicant || receiptData.applicant_name || 'UMak Applicant';
+  const plateNumber = receiptData.plateNumber || receiptData.plate_number || 'N/A';
+  const paymentMethod = receiptData.method || receiptData.payment_method || 'PAYMONGO';
+  const stickerNumber = receiptData.stickerNumber || receiptData.sticker_number;
+  const claimDate = receiptData.claimDate || receiptData.claim_date;
+  const userEmail = receiptData.email || 'your registered email';
+  const isReady = receiptData.status === 'ready_for_release' || receiptData.status === 'paid' || receiptData.status === 'claimed' || receiptData.status === 'issued';
+
+  const qrCodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
     `${window.location.origin}/verify-sticker?ref=${refNo}`
   )}`;
 
   return (
-    <div className="space-y-5 animate-in fade-in">
-      {/* Success Banner */}
-      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center space-y-1">
-        <i className="fa-solid fa-circle-check text-3xl text-emerald-600 mb-1"></i>
-        <h4 className="text-lg font-extrabold text-emerald-800">Payment & Application Successful!</h4>
-        <p className="text-xs text-emerald-700">Your application and encrypted documents are now submitted to the OHSO Office.</p>
+    <div className="space-y-4 animate-in fade-in">
+      {/* Success / Release Banner */}
+      <div className={`border rounded-2xl p-4 text-center space-y-1 ${
+        isReady ? 'bg-emerald-50 border-emerald-200' : 'bg-blue-50 border-blue-200'
+      }`}>
+        <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-2xl mb-1 shadow-xs">
+          <i className="fa-solid fa-circle-check"></i>
+        </div>
+        <h4 className="text-lg font-black text-slate-900">
+          {isReady ? 'Sticker Verified & Ready for Release!' : 'Payment & Application Successful!'}
+        </h4>
+        <p className="text-xs text-slate-600 max-w-sm mx-auto">
+          {isReady
+            ? 'Your payment proof has been verified by OHSO. Your official hologram sticker is ready for pickup!'
+            : 'Your payment has been recorded. OHSO Security will review and verify your sticker details.'}
+        </p>
+        {stickerNumber && (
+          <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-300 rounded-xl shadow-xs font-mono font-extrabold text-sm text-umak-navy">
+            <i className="fa-solid fa-barcode text-umak-orange"></i>
+            <span>Sticker No: {stickerNumber}</span>
+          </div>
+        )}
       </div>
 
       {/* Official Electronic Receipt Card with QR Code */}
-      <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50 space-y-4 text-xs">
+      <div className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-slate-50 space-y-4 text-xs">
         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-          <span className="font-mono font-extrabold text-umak-navy text-sm">UMak OHSO E-Receipt</span>
-          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold uppercase text-[10px]">
-            {receiptData.method} PAID
+          <div>
+            <span className="font-mono font-extrabold text-umak-navy text-sm block">UMak OHSO E-Receipt</span>
+            <span className="text-[10px] text-slate-500">Official Campus Access Hologram Sticker</span>
+          </div>
+          <span className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 font-bold uppercase text-[10px] border border-emerald-200">
+            {String(paymentMethod).toUpperCase()} PAID
           </span>
         </div>
 
@@ -40,87 +69,100 @@ export const StickerReceiptStep3 = ({
           {/* Details Column */}
           <div className="sm:col-span-8 space-y-1.5 font-mono">
             <div className="flex justify-between">
-              <span className="text-slate-500">Ref No:</span>
-              <span className="font-bold text-slate-900">{refNo}</span>
+              <span className="text-slate-500">Ref Code:</span>
+              <span className="font-bold text-slate-900 break-all">{refNo}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Applicant:</span>
-              <span className="font-bold text-slate-900">{receiptData.applicant}</span>
+              <span className="font-bold text-slate-900">{applicantName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Plate Number:</span>
-              <span className="font-bold text-slate-900">{receiptData.plateNumber}</span>
+              <span className="font-bold text-slate-900 uppercase">{plateNumber}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Amount Paid:</span>
-              <span className="font-bold text-emerald-600">₱{receiptData.amount?.toFixed(2)}</span>
+              <span className="font-bold text-emerald-600">₱{amountNumber.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-[10px] text-slate-400 pt-1">
-              <span>Date & Time:</span>
-              <span>{receiptData.date}</span>
+            {claimDate && (
+              <div className="flex justify-between text-blue-900 pt-1 border-t border-slate-200">
+                <span className="font-bold">Scheduled Pickup:</span>
+                <span className="font-extrabold">{formatDateClean(claimDate)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-[10px] text-slate-400 pt-0.5">
+              <span>Date:</span>
+              <span>{receiptData.date || new Date().toLocaleDateString()}</span>
             </div>
           </div>
 
           {/* Dynamic Scannable QR Code Column */}
           <div className="sm:col-span-4 flex flex-col items-center justify-center p-2.5 bg-white rounded-xl border border-slate-200 shadow-xs space-y-1 text-center">
-            {receiptData.status === 'approved' || receiptData.status === 'issued' || receiptData.stickerNumber ? (
-              <>
-                <img
-                  src={qrCodeApiUrl}
-                  alt="UMak Sticker Verification QR Code"
-                  className="w-24 h-24 object-contain"
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsVerifyModalOpen(true)}
-                  className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <i className="fa-solid fa-shield-check text-emerald-500"></i> Verify Pass
-                </button>
-              </>
-            ) : (
-              <div className="space-y-1 p-1">
-                <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 mx-auto flex items-center justify-center text-base">
-                  <i className="fa-solid fa-clock-rotate-left"></i>
-                </div>
-                <span className="font-bold text-[10px] text-amber-700 block uppercase tracking-wider">Pending Approval</span>
-                <p className="text-[9.5px] text-slate-500 leading-tight">
-                  QR Gate Pass & Email will be sent upon OHSO approval.
-                </p>
-              </div>
-            )}
+            <img
+              src={qrCodeApiUrl}
+              alt="UMak Sticker Verification QR Code"
+              className="w-22 h-22 object-contain"
+            />
+            <button
+              type="button"
+              onClick={() => setIsVerifyModalOpen(true)}
+              className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <i className="fa-solid fa-shield-check text-emerald-500"></i> Verify Pass
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Pickup Instructions */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2 text-xs text-amber-900">
-        <h5 className="font-bold flex items-center gap-1.5 text-amber-800">
-          <i className="fa-solid fa-location-dot"></i> Next Step: Sticker Claiming at OHSO
-        </h5>
-        <p className="text-[11px] leading-relaxed">
-          Please visit the <strong>University Safety and Security Office (OHSO)</strong> inside UMak Campus to claim your official sticker. Bring your original Driver's License and Student ID for verification.
+      {/* 📍 Official OHSO Claiming & Pickup Instructions Box */}
+      <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 space-y-2.5 text-xs text-amber-950">
+        <div className="flex items-center gap-2 text-amber-900 font-extrabold uppercase tracking-wide">
+          <i className="fa-solid fa-location-dot text-umak-orange text-sm"></i>
+          <span>Official Sticker Claiming Guidelines</span>
+        </div>
+        <p className="text-[11px] text-amber-900 leading-relaxed">
+          An official release notification has been dispatched to your email at <strong>{userEmail}</strong>. Please follow these instructions to claim your physical hologram sticker:
         </p>
+        <div className="space-y-1.5 pl-2 text-[11px] text-amber-900 font-medium">
+          <div className="flex items-start gap-2">
+            <i className="fa-solid fa-building text-amber-700 mt-0.5 text-xs"></i>
+            <span><strong>Claim Location:</strong> OHSO Security Office, Ground Floor, HPSB Building.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <i className="fa-solid fa-clock text-amber-700 mt-0.5 text-xs"></i>
+            <span><strong>Office Hours:</strong> Monday to Friday, 8:00 AM – 5:00 PM.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <i className="fa-solid fa-id-card text-amber-700 mt-0.5 text-xs"></i>
+            <span><strong>Requirements to Present:</strong> Original UMak Student/Faculty ID and Driver's License.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <i className="fa-solid fa-qrcode text-amber-700 mt-0.5 text-xs"></i>
+            <span><strong>Digital Pass:</strong> Show this E-Receipt or the QR Code on your phone to the OHSO officer.</span>
+          </div>
+        </div>
 
         {/* Tutorial Link */}
         {setIsTutorialOpen && (
-          <button
-            type="button"
-            onClick={() => setIsTutorialOpen(true)}
-            className="text-[11px] font-bold text-umak-navy hover:underline inline-flex items-center gap-1 mt-1 cursor-pointer"
-          >
-            <i className="fa-solid fa-map-location-dot text-umak-orange"></i>
-            <span>View Campus Map & Navigation Guide</span>
-          </button>
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setIsTutorialOpen(true)}
+              className="text-[11px] font-bold text-umak-navy hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <i className="fa-solid fa-map-location-dot text-umak-orange"></i>
+              <span>View HPSB Campus Navigation Guide</span>
+            </button>
+          </div>
         )}
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2 pt-2">
+      <div className="flex gap-2 pt-1">
         <button
           type="button"
           onClick={() => window.print()}
-          className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+          className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
         >
           <i className="fa-solid fa-print"></i> Print E-Receipt
         </button>
@@ -128,9 +170,9 @@ export const StickerReceiptStep3 = ({
         <button
           type="button"
           onClick={onClose}
-          className="w-1/2 py-3 bg-umak-navy hover:bg-umak-navydark text-white font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer"
+          className="flex-1 py-3 bg-umak-navy hover:bg-umak-navydark text-white font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
         >
-          Done & Close
+          <i className="fa-solid fa-check"></i> Done & Close
         </button>
       </div>
 
@@ -143,3 +185,5 @@ export const StickerReceiptStep3 = ({
     </div>
   );
 };
+
+export default StickerReceiptStep3;

@@ -42,11 +42,13 @@ async function seedHPSB() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 1. Clear existing slots and lots
-    await connection.query('SET FOREIGN_KEY_CHECKS = 0');
-    await connection.query('TRUNCATE TABLE parking_slots');
-    await connection.query('TRUNCATE TABLE parking_lots');
-    await connection.query('SET FOREIGN_KEY_CHECKS = 1');
+    // 1. Check if lots and slots are already seeded
+    const [existingLots] = await connection.query('SELECT COUNT(*) AS cnt FROM parking_lots');
+    if (existingLots && existingLots[0] && existingLots[0].cnt > 0) {
+      console.log('✓ Parking lots and slots are already seeded. Skipping truncation to preserve live state.');
+      await connection.end();
+      return;
+    }
 
     // 2. Insert 4 HPSB Levels into parking_lots
     const lots = [

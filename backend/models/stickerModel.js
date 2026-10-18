@@ -45,11 +45,25 @@ const getAllApplications = (callback) => {
   db.query('SELECT * FROM vehicle_stickers ORDER BY created_at DESC', callback);
 };
 
-const updateStatus = (id, status, sticker_number, admin_remarks, callback) => {
+const updateStatus = (id, status, sticker_number, admin_remarks, claim_date, rejection_reason, callback) => {
+  // Support both 5-argument legacy calls and 7-argument calls
+  let cb = callback;
+  let cDate = claim_date;
+  let rReason = rejection_reason;
+
+  if (typeof claim_date === 'function') {
+    cb = claim_date;
+    cDate = null;
+    rReason = null;
+  } else if (typeof rejection_reason === 'function') {
+    cb = rejection_reason;
+    rReason = null;
+  }
+
   db.query(
-    'UPDATE vehicle_stickers SET status = ?, sticker_number = ?, admin_remarks = ? WHERE id = ?',
-    [status, sticker_number, admin_remarks, id],
-    callback
+    'UPDATE vehicle_stickers SET status = ?, sticker_number = ?, admin_remarks = ?, claim_date = COALESCE(?, claim_date), rejection_reason = COALESCE(?, rejection_reason) WHERE id = ?',
+    [status, sticker_number, admin_remarks, cDate, rReason, id],
+    cb
   );
 };
 
@@ -73,8 +87,8 @@ const updatePendingApplication = (id, updateData, callback) => {
 
 const getByRefOrStickerNumber = (identifier, callback) => {
   db.query(
-    'SELECT * FROM vehicle_stickers WHERE payment_ref_no = ? OR sticker_number = ? OR id = ? LIMIT 1',
-    [identifier, identifier, identifier],
+    'SELECT * FROM vehicle_stickers WHERE payment_ref_no = ? OR sticker_number = ? LIMIT 1',
+    [identifier, identifier],
     (err, results) => {
       if (err) return callback(err);
       callback(null, results && results.length > 0 ? results[0] : null);

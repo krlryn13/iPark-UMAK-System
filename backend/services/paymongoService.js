@@ -1,11 +1,3 @@
-/**
- * PayMongo REST API Integration Service
- * Communicates with PayMongo API v1 endpoints using HTTP Basic Auth (PAYMONGO_SECRET_KEY).
- * 
- * Functions:
- *   createCheckoutSession  — Generates PayMongo Checkout Session URL for GCash, Maya, QR Ph, & Cards.
- *   retrieveCheckoutSession — Verifies payment completion status from PayMongo.
- */
 
 const PAYMONGO_BASE_URL = 'https://api.paymongo.com/v1';
 
@@ -21,10 +13,12 @@ const getAuthHeader = () => {
 };
 
 /**
- * Creates a PayMongo Checkout Session for ₱200.00 Sticker Fee
+ * Creates a PayMongo Checkout Session.
+ * @param {number} amount - Total amount in PHP including processing fee
+ * @param {string[]} paymentMethodTypes - e.g. ['gcash'] or ['gcash','paymaya','card','qrph']
  */
-const createCheckoutSession = async ({ amount = 200.00, description, applicantName, email, referenceNo, returnUrl }) => {
-  const amountInCents = Math.round(amount * 100); // ₱200.00 = 20000 centavos
+const createCheckoutSession = async ({ amount = 200.00, description, applicantName, email, referenceNo, returnUrl, paymentMethodTypes }) => {
+  const amountInCents = Math.round(amount * 100); // e.g. ₱204.46 = 20446 centavos
 
   const payload = {
     data: {
@@ -42,7 +36,7 @@ const createCheckoutSession = async ({ amount = 200.00, description, applicantNa
             quantity: 1
           }
         ],
-        payment_method_types: ['gcash', 'paymaya', 'card', 'qrph'],
+        payment_method_types: paymentMethodTypes || ['gcash', 'paymaya', 'card', 'qrph'],
         reference_number: referenceNo,
         success_url: `${returnUrl}?payment=success&ref=${referenceNo}`,
         cancel_url: `${returnUrl}?payment=cancel&ref=${referenceNo}`,
@@ -92,10 +86,14 @@ const retrieveCheckoutSession = async (sessionId) => {
 
   const sessionObj = responseData.data;
   const payments = sessionObj.attributes.payments || [];
-  const isPaid = payments.some(p => p.attributes.status === 'paid') || sessionObj.attributes.status === 'active';
+  const isPaid = payments.some(p => p.attributes.status === 'paid') || sessionObj.attributes.status === 'completed';
+  const paymentId = (payments.length > 0 && payments[0].id) ? payments[0].id : null;
+  const referenceNumber = sessionObj.attributes.reference_number;
 
   return {
     sessionId: sessionObj.id,
+    paymentId,
+    referenceNumber,
     isPaid,
     payments,
     status: sessionObj.attributes.status,

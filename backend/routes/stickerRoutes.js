@@ -29,10 +29,12 @@ router.get('/verify/:identifier', stickerController.verifyStickerPublic);
 
 // Authenticated user
 router.post('/apply', authenticateToken, handleUploadMiddleware, stickerController.applySticker);
+router.post('/pay', authenticateToken, handleUploadMiddleware, stickerController.payApprovedSticker);
 router.get('/user/:userId', authenticateToken, stickerController.getUserStickers);
 
 // Admin only
 router.get('/admin/all', authenticateToken, requireRole('admin'), stickerController.getAllStickersAdmin);
 router.post('/admin/update', authenticateToken, requireRole('admin'), stickerController.updateStickerStatusAdmin);
+router.post('/admin/verify-payment', authenticateToken, requireRole('admin'), stickerController.verifyPaymentAdmin);
 
 module.exports = router;
