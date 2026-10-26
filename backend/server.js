@@ -14,6 +14,7 @@ const authRoutes = require('./routes/authRoutes');
 const stickerRoutes = require('./routes/stickerRoutes');
 const guestRoutes = require('./routes/guestRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -56,6 +57,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/stickers', stickerRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Diagnostic DB Health Check endpoint (Safe generic response)
 app.get('/api/db-health', (req, res) => {
@@ -114,11 +116,13 @@ app.listen(PORT, async () => {
         const { initAuthDB } = require('./init_auth_db');
         const { initGuestDB } = require('./init_guest_db');
         const { initStickersDB } = require('./init_stickers_db');
+        const { initAuditDB } = require('./init_audit_db');
         const { seedHPSB } = require('./seed_hpsb');
         
         await initAuthDB();
         await initGuestDB();
         await initStickersDB();
+        await initAuditDB();
         await seedHPSB();
         console.log('✓ Automatic Cloud DB Table Initialization & Seeding Completed!');
     } catch (dbInitErr) {

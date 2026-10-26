@@ -2,6 +2,7 @@ const guestModel = require('../models/guestModel');
 const emailService = require('../services/emailService');
 const db = require('../config/db');
 const { handleServerError } = require('../utils/errorHandler');
+const { logAudit } = require('../services/auditService');
 
 const generatePassCode = (role) => {
   const prefix = role === 'VIP' ? 'VIP' : role === 'Faculty/Staff' ? 'FAC' : 'GUEST';
@@ -88,6 +89,16 @@ const createReservation = (req, res) => {
     guestModel.createReservation(reservationData, (createErr, result) => {
       if (createErr) return handleServerError(res, createErr, 'Failed to submit guest reservation.');
 
+      logAudit({
+        req,
+        category: 'guest',
+        action: 'GUEST_RESERVATION_REQUESTED',
+        targetType: 'guest_reservation',
+        targetId: result.insertId,
+        actor: { email: cleanEmail, role: requestee_role },
+        description: `Requested guest pass for ${guest_name}`
+      });
+
       // Asynchronously send email confirmation pass to guest
       emailService.sendGuestPassEmail(
         reservationData.email,
@@ -147,6 +158,16 @@ const updateReservationStatusAdmin = (req, res) => {
     db.query('SELECT * FROM guest_reservations WHERE id = ?', [id], (findErr, rows) => {
       if (!findErr && rows && rows[0]) {
         const gst = rows[0];
+
+        logAudit({
+          req,
+          category: 'admin',
+          action: status === 'approved' ? 'GUEST_APPROVED' : status === 'rejected' ? 'GUEST_REJECTED' : 'GUEST_UPDATED',
+          targetType: 'guest_reservation',
+          targetId: gst.id,
+          description: status === 'approved' ? 'Approved guest reservation' : status === 'rejected' ? 'Rejected guest reservation' : `Updated guest reservation to ${status}`
+        });
+
         emailService.sendGuestPassStatusEmail(
           gst.email,
           gst.guest_name,

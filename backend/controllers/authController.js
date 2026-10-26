@@ -5,6 +5,7 @@ const { sendVerificationEmail } = require('../services/emailService');
 const { validatePassword } = require('../utils/passwordValidator');
 const { handleServerError } = require('../utils/errorHandler');
 const { encryptAES256, decryptAES256 } = require('../utils/encryption');
+const { logAudit } = require('../services/auditService');
 
 const UMAK_DOMAIN = '@umak.edu.ph';
 const MAX_FAILED_ATTEMPTS = 5;
@@ -102,6 +103,14 @@ const register = (req, res) => {
             }, async (err, result) => {
                 if (err) return handleServerError(res, err, 'Account creation failed. Email address may already be registered.');
 
+                logAudit({
+                    req,
+                    category: 'auth',
+                    action: 'REGISTER',
+                    actor: { id: result.insertId, email: cleanEmail, role: userRole },
+                    description: `Registered new ${userRole} account`
+                });
+
                 // Send email asynchronously in background so client response is instant
                 sendVerificationEmail(cleanEmail, name.trim(), vCode).catch(mailErr => {
                     console.error('[EMAIL ERROR]', mailErr.message);
@@ -162,6 +171,15 @@ const verifyCode = (req, res) => {
                     if (lockErr) console.error('[LOCKOUT ERROR]', lockErr.message);
                 });
 
+                logAudit({
+                    req,
+                    category: 'auth',
+                    action: 'ACCOUNT_LOCKED',
+                    status: 'failed',
+                    actor: { id: user.id, email: user.email, role: user.role },
+                    description: 'Account locked (3 failed verification attempts)'
+                });
+
                 return res.status(423).json({
                     error: `Security Lockout: 3 consecutive wrong verification codes entered (3/3). Account is locked for ${LOCKOUT_MINUTES} minutes for security. Please request an admin unlock or wait 15 minutes.`,
                     isLocked: true,
@@ -182,6 +200,14 @@ const verifyCode = (req, res) => {
 
         userModel.verifyUserCode(cleanEmail, (verErr) => {
             if (verErr) return handleServerError(res, verErr, 'Account verification failed.');
+
+            logAudit({
+                req,
+                category: 'auth',
+                action: 'EMAIL_VERIFIED',
+                actor: { id: user.id, email: user.email, role: user.role },
+                description: 'Email address verified'
+            });
 
             const userData = { id: user.id, name: user.name, email: user.email, role: user.role, is_verified: 1 };
             const token = jwt.sign(
@@ -279,6 +305,16 @@ const login = (req, res) => {
                 if (newAttempts >= MAX_FAILED_ATTEMPTS) {
                     // Lock the account
                     userModel.lockAccount(cleanEmail, LOCKOUT_MINUTES, () => { });
+
+                    logAudit({
+                        req,
+                        category: 'auth',
+                        action: 'ACCOUNT_LOCKED',
+                        status: 'failed',
+                        actor: { id: user.id, email: user.email, role: user.role },
+                        description: `Account locked (${MAX_FAILED_ATTEMPTS} failed password attempts)`
+                    });
+
                     return res.status(423).json({
                         error: `Account locked for ${LOCKOUT_MINUTES} minutes due to ${MAX_FAILED_ATTEMPTS} consecutive failed login attempts. You can request OHSO Admin to unlock it.`,
                         isLocked: true,
@@ -288,6 +324,16 @@ const login = (req, res) => {
                 }
 
                 userModel.incrementFailedAttempts(cleanEmail, () => { });
+
+                logAudit({
+                    req,
+                    category: 'auth',
+                    action: 'LOGIN_FAILED',
+                    status: 'failed',
+                    actor: { id: user.id, email: user.email, role: user.role },
+                    description: `Failed password login (${newAttempts}/${MAX_FAILED_ATTEMPTS})`
+                });
+
                 const remaining = MAX_FAILED_ATTEMPTS - newAttempts;
                 return res.status(401).json({
                     error: `Incorrect password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before account lockout.`
@@ -314,6 +360,14 @@ const login = (req, res) => {
                     email: cleanEmail
                 });
             }
+
+            logAudit({
+                req,
+                category: 'auth',
+                action: 'LOGIN_SUCCESS',
+                actor: { id: user.id, email: user.email, role: user.role },
+                description: 'Signed in with password'
+            });
 
             const userData = { id: user.id, name: user.name, email: user.email, role: user.role, is_verified: 1 };
             const token = jwt.sign(
@@ -381,6 +435,15 @@ const adminUnlockUser = (req, res) => {
 
         userModel.adminUnlockUser(userId, async (updErr) => {
             if (updErr) return handleServerError(res, updErr, 'Failed to unlock user account.');
+
+            logAudit({
+                req,
+                category: 'admin',
+                action: 'USER_UNLOCKED',
+                targetType: 'user',
+                targetId: user.id,
+                description: `Unlocked account for ${user.email}`
+            });
 
             // Send notification email asynchronously
             const { sendAccountUnlockedEmail } = require('../services/emailService');
@@ -589,6 +652,14 @@ const googleLogin = async (req, res) => {
                 // Reset failed attempts & issue JWT for verified user
                 userModel.resetFailedAttempts(cleanEmail, () => { });
 
+                logAudit({
+                    req,
+                    category: 'auth',
+                    action: 'GOOGLE_LOGIN',
+                    actor: { id: user.id, email: user.email, role: user.role },
+                    description: 'Signed in via Google SSO'
+                });
+
                 const jwtToken = jwt.sign(
                     { id: user.id, name: user.name, email: user.email, role: user.role },
                     JWT_SECRET,
@@ -641,8 +712,16 @@ const googleLogin = async (req, res) => {
                     is_verified: 0
                 };
 
-                userModel.createUser(newUserData, async (createErr) => {
+                userModel.createUser(newUserData, async (createErr, createRes) => {
                     if (createErr) return handleServerError(res, createErr, 'Failed to provision Google account.');
+
+                    logAudit({
+                        req,
+                        category: 'auth',
+                        action: 'REGISTER',
+                        actor: { id: createRes ? createRes.insertId : null, email: cleanEmail, role: userRole },
+                        description: `Registered new ${userRole} account via Google`
+                    });
 
                     try {
                         await sendVerificationEmail(cleanEmail, newUserData.name, verificationCode);
@@ -661,7 +740,7 @@ const googleLogin = async (req, res) => {
     } catch (authErr) {
         console.error('[GOOGLE LOGIN ERROR]', authErr.message);
         return res.status(400).json({
-            error: authErr.message || 'Google authentication failed. Please try again.'
+            error: 'Google authentication failed. Please sign in with your official @umak.edu.ph account.'
         });
     }
 };

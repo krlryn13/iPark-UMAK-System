@@ -18,7 +18,7 @@ const handleUploadMiddleware = (req, res, next) => {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ error: 'Security Limit Exceeded: Document file size must not exceed 5MB.' });
       }
-      return res.status(400).json({ error: err.message || 'File upload error.' });
+      return res.status(400).json({ error: 'Failed to process document upload. Please ensure files are PNG, JPG, or PDF under 5MB.' });
     }
     next();
   });

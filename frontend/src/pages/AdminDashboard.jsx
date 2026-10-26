@@ -10,6 +10,9 @@ import { useParkingData } from '../hooks/useParkingData';
 import { API_BASE_URL } from '../config/api';
 import { formatDateClean, formatDateShort, formatDateInput } from '../utils/dateUtils';
 import { getStatusConfig, getGuestStatusConfig, getActionMessage } from '../utils/statusConfig';
+import { AnalyticsTab } from '../components/admin/AnalyticsTab';
+import { AuditLogsTab } from '../components/admin/AuditLogsTab';
+import { ReportsTab } from '../components/admin/ReportsTab';
 
 export const AdminDashboard = () => {
   const { currentUser, logoutUser, loading: authLoading, authFetch } = useAuth();
@@ -22,6 +25,28 @@ export const AdminDashboard = () => {
   const [adminGuestReservations, setAdminGuestReservations] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
+
+  // Default 30-day date range in YYYY-MM-DD
+  const getDefaultDateRange = () => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(to.getDate() - 29);
+    return {
+      from: from.toISOString().split('T')[0],
+      to: to.toISOString().split('T')[0]
+    };
+  };
+
+  const [dateRange, setDateRange] = useState(getDefaultDateRange);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
+  // Audit Log tab states
+  const [auditData, setAuditData] = useState(null);
+  const [auditCategory, setAuditCategory] = useState('all');
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditPage, setAuditPage] = useState(1);
+  const [loadingAudit, setLoadingAudit] = useState(false);
 
   // Selected application for document inspector modal
   const [inspectApplication, setInspectApplication] = useState(null);
@@ -80,13 +105,57 @@ export const AdminDashboard = () => {
     } catch (e) { }
   };
 
+  // Fetch Analytics data
+  const fetchAnalytics = async () => {
+    setLoadingAnalytics(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/admin/analytics?from=${dateRange.from}&to=${dateRange.to}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAnalyticsData(data);
+      }
+    } catch (e) { }
+    setLoadingAnalytics(false);
+  };
+
+  // Fetch Audit Logs data
+  const fetchAuditLogs = async () => {
+    setLoadingAudit(true);
+    try {
+      const catParam = auditCategory !== 'all' ? `&category=${auditCategory}` : '';
+      const searchParam = auditSearch ? `&search=${encodeURIComponent(auditSearch)}` : '';
+      const res = await authFetch(
+        `${API_BASE_URL}/api/admin/audit-logs?from=${dateRange.from}&to=${dateRange.to}&page=${auditPage}&pageSize=50${catParam}${searchParam}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setAuditData(data);
+      }
+    } catch (e) { }
+    setLoadingAudit(false);
+  };
+
   useEffect(() => {
     if (currentUser?.role === 'admin') {
       fetchAdminStickers();
       fetchAdminGuestReservations();
       fetchAdminUsers();
+      fetchAnalytics();
+      fetchAuditLogs();
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser?.role === 'admin' && activeAdminTab === 'analytics') {
+      fetchAnalytics();
+    }
+  }, [dateRange, activeAdminTab]);
+
+  useEffect(() => {
+    if (currentUser?.role === 'admin' && activeAdminTab === 'audit') {
+      fetchAuditLogs();
+    }
+  }, [dateRange, auditCategory, auditSearch, auditPage, activeAdminTab]);
 
   const handleGuestStatusUpdate = async (id, status) => {
     try {
@@ -342,8 +411,6 @@ export const AdminDashboard = () => {
 
         </div>
 
-
-
         {/* ADMIN TAB NAVIGATION */}
         <div className="flex items-center bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto">
           <button
@@ -387,12 +454,45 @@ export const AdminDashboard = () => {
               }`}
           >
             <i className="fa-solid fa-shield-halved text-red-400"></i>
-            <span>Account Security & Lockouts</span>
+            <span>Account Security</span>
             {adminUsers.filter(u => u.unlock_requested || (u.locked_until && new Date(u.locked_until) > new Date())).length > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-red-500 text-white font-mono text-[10px] font-bold animate-pulse">
                 {adminUsers.filter(u => u.unlock_requested || (u.locked_until && new Date(u.locked_until) > new Date())).length}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('analytics')}
+            className={`flex-1 min-w-[170px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${activeAdminTab === 'analytics'
+                ? 'bg-umak-navy text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+          >
+            <i className="fa-solid fa-chart-line text-blue-400"></i>
+            <span>Analytics</span>
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('audit')}
+            className={`flex-1 min-w-[170px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${activeAdminTab === 'audit'
+                ? 'bg-umak-navy text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+          >
+            <i className="fa-solid fa-list-check text-purple-400"></i>
+            <span>Audit Logs</span>
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('reports')}
+            className={`flex-1 min-w-[170px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${activeAdminTab === 'reports'
+                ? 'bg-umak-navy text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+          >
+            <i className="fa-solid fa-file-pdf text-umak-orange"></i>
+            <span>Reports (PDF)</span>
           </button>
         </div>
 
@@ -1096,9 +1196,47 @@ export const AdminDashboard = () => {
           </div>
         )}
 
-      </main>
+        {/* ===== SECTION 5: DATA ANALYTICS & CAMPUS INTELLIGENCE ===== */}
+        {activeAdminTab === 'analytics' && (
+          <AnalyticsTab
+            analyticsData={analyticsData}
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            loading={loadingAnalytics}
+            onRefresh={fetchAnalytics}
+          />
+        )}
 
-      <Footer />
+        {/* ===== SECTION 6: SYSTEM AUDIT LOGS & EVENT TRAIL ===== */}
+        {activeAdminTab === 'audit' && (
+          <AuditLogsTab
+            auditData={auditData}
+            activeCategory={auditCategory}
+            setActiveCategory={setAuditCategory}
+            searchQuery={auditSearch}
+            setSearchQuery={setAuditSearch}
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            page={auditPage}
+            setPage={setAuditPage}
+            loading={loadingAudit}
+            onRefresh={fetchAuditLogs}
+          />
+        )}
+
+        {/* ===== SECTION 7: OFFICIAL GENERATED REPORTS (PDF) ===== */}
+        {activeAdminTab === 'reports' && (
+          <ReportsTab
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            authFetch={authFetch}
+            apiBaseUrl={API_BASE_URL}
+            adminName={currentUser?.name || 'OHSO Administrator'}
+            showToast={showToast}
+          />
+        )}
+
+      </main>
 
       {/* APPROVAL & CLAIM DATE MODAL */}
       {approvalModalApp && (
@@ -1350,6 +1488,8 @@ export const AdminDashboard = () => {
 
       {/* TOAST NOTIFICATIONS */}
       <ToastContainer />
+
+      <Footer />
     </div>
   );
 };

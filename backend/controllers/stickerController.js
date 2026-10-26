@@ -4,6 +4,7 @@ const paymongoService = require('../services/paymongoService');
 const db = require('../config/db');
 const { handleServerError } = require('../utils/errorHandler');
 const { encryptAES256, decryptAES256 } = require('../utils/encryption');
+const { logAudit } = require('../services/auditService');
 
 // Helper to generate official UMak sticker code (e.g. UMK-CAR-2026-8941)
 const generateStickerNumber = (vehicleType = 'car') => {
@@ -144,6 +145,16 @@ const applySticker = async (req, res) => {
     stickerModel.createApplication(applicationData, (createErr, result) => {
       if (createErr) return handleServerError(res, createErr, 'Failed to submit sticker application.');
 
+      logAudit({
+        req,
+        category: 'sticker',
+        action: 'STICKER_APPLIED',
+        targetType: 'sticker',
+        targetId: result.insertId,
+        actor: { id: user_id, email, role: req.user ? req.user.role : 'student' },
+        description: `Applied for vehicle sticker (${plate_number})`
+      });
+
       res.status(201).json({
         message: 'Documents submitted successfully! The OHSO team will review your application and send you an email once verified.',
         applicationId: result.insertId,
@@ -230,6 +241,16 @@ const payApprovedSticker = async (req, res) => {
     stickerModel.updatePendingApplication(app.id, updateFields, (updateErr) => {
       if (updateErr) return handleServerError(res, updateErr, 'Failed to update payment status.');
 
+      logAudit({
+        req,
+        category: 'sticker',
+        action: 'PAYMENT_SUBMITTED',
+        targetType: 'sticker',
+        targetId: app.id,
+        actor: { id: userId, email: app.email, role: req.user ? req.user.role : 'student' },
+        description: `Submitted payment proof (₱${app.amount || 200})`
+      });
+
       // Dispatch receipt acknowledgement email
       emailService.sendPaymentConfirmationEmail({
         toEmail: app.email,
@@ -282,6 +303,15 @@ const verifyPaymentAdmin = (req, res) => {
       stickerModel.updatePendingApplication(app.id, updateData, (updErr) => {
         if (updErr) return handleServerError(res, updErr, 'Failed to update payment verification.');
 
+        logAudit({
+          req,
+          category: 'admin',
+          action: 'PAYMENT_VERIFIED',
+          targetType: 'sticker',
+          targetId: app.id,
+          description: `Verified payment, issued sticker #${stickerNumber}`
+        });
+
         // Dispatch Ready for Release Email
         emailService.sendStickerReadyForReleaseEmail({
           toEmail: app.email,
@@ -312,6 +342,15 @@ const verifyPaymentAdmin = (req, res) => {
 
       stickerModel.updatePendingApplication(app.id, updateData, (updErr) => {
         if (updErr) return handleServerError(res, updErr, 'Failed to update payment status to hold.');
+
+        logAudit({
+          req,
+          category: 'admin',
+          action: 'PAYMENT_HOLD',
+          targetType: 'sticker',
+          targetId: app.id,
+          description: 'Placed payment proof on hold'
+        });
 
         // Dispatch Payment Hold Email
         emailService.sendPaymentHoldEmail({
@@ -385,10 +424,20 @@ const updateStickerStatusAdmin = (req, res) => {
   stickerModel.updateStatus(id, status, stickerNumber, admin_remarks || '', claim_date || null, rejection_reason || null, (err, result) => {
     if (err) return handleServerError(res, err, 'Failed to update sticker application status.');
 
-    // Fetch sticker application record to send email notification
+    // Fetch sticker application record to send email notification and log audit
     db.query('SELECT * FROM vehicle_stickers WHERE id = ?', [id], (findErr, rows) => {
       if (!findErr && rows && rows[0]) {
         const stk = rows[0];
+
+        logAudit({
+          req,
+          category: 'admin',
+          action: status === 'approved' ? 'STICKER_APPROVED' : status === 'rejected' ? 'STICKER_REJECTED' : 'STICKER_UPDATED',
+          targetType: 'sticker',
+          targetId: stk.id,
+          description: status === 'approved' ? 'Approved sticker application' : status === 'rejected' ? 'Rejected sticker application' : `Updated sticker status to ${status}`
+        });
+
         emailService.sendStickerStatusEmail(
           stk.email,
           stk.applicant_name,
