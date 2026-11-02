@@ -2,7 +2,8 @@ const crypto = require('crypto');
 
 // AES-256-GCM Encryption settings
 const ALGORITHM = 'aes-256-gcm';
-const SECRET_KEY = crypto.scryptSync(process.env.JWT_SECRET || 'ipark_umak_super_secret_aes_key_2026', 'ipark_salt', 32);
+const RAW_KEY = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'ipark_umak_super_secret_aes_key_2026';
+const SECRET_KEY = crypto.scryptSync(RAW_KEY, 'ipark_salt', 32);
 
 /**
  * Encrypts plaintext using AES-256-GCM

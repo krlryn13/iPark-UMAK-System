@@ -491,14 +491,31 @@ const verifyStickerPublic = (req, res) => {
     const expireDate = new Date(issueDate);
     expireDate.setFullYear(expireDate.getFullYear() + 1);
 
+    // Data Privacy Act (RA 10173) PII Masking for public scanner display
+    const maskName = (name) => {
+      if (!name) return 'UMak Heron';
+      const parts = name.trim().split(/\s+/);
+      return parts.map(p => {
+        if (p.length <= 2) return p;
+        return p[0] + '*'.repeat(Math.min(p.length - 2, 4)) + p[p.length - 1];
+      }).join(' ');
+    };
+
+    const maskStudentId = (id) => {
+      if (!id) return 'N/A';
+      const clean = id.trim();
+      if (clean.length <= 4) return '****';
+      return clean.slice(0, 3) + '****' + clean.slice(-2);
+    };
+
     res.json({
       isValid: isApprovedOrIssued && !isExpired,
       status: record.status,
       isExpired: isExpired,
       stickerNumber: record.sticker_number || 'PENDING ASSIGNMENT',
       paymentRefNo: record.payment_ref_no,
-      applicantName: record.applicant_name,
-      studentIdNum: record.student_id_num,
+      applicantName: maskName(record.applicant_name),
+      studentIdNum: maskStudentId(record.student_id_num),
       vehicleType: record.vehicle_type,
       vehicleMake: record.vehicle_make,
       plateNumber: record.plate_number,

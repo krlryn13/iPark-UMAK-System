@@ -17,7 +17,11 @@ backend/uploads/documents/*
 !backend/uploads/documents/.gitkeep
 *.log
 
-# IDE & OS files
+# IDE, Agent & OS files
 .DS_Store
 .vscode
 .idea
+.agent
+.agent/
+**/.agent
+scratch/

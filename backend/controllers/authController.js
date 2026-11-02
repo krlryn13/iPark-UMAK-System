@@ -275,7 +275,7 @@ const login = (req, res) => {
     userModel.findByEmail(cleanEmail, async (err, results) => {
         if (err) return handleServerError(res, err, 'Sign in error.');
         if (results.length === 0) {
-            return res.status(401).json({ error: 'Account not found. Please Sign Up for a new Heron account.' });
+            return res.status(401).json({ error: 'Invalid @umak.edu.ph email or password. Please verify your credentials or Sign Up.' });
         }
 
         const user = results[0];
@@ -336,7 +336,7 @@ const login = (req, res) => {
 
                 const remaining = MAX_FAILED_ATTEMPTS - newAttempts;
                 return res.status(401).json({
-                    error: `Incorrect password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before account lockout.`
+                    error: `Invalid credentials. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before account lockout.`
                 });
             }
 
@@ -477,8 +477,10 @@ const forgotPassword = (req, res) => {
     userModel.findByEmail(cleanEmail, async (err, results) => {
         if (err) return handleServerError(res, err, 'User lookup error.');
         if (results.length === 0) {
-            return res.status(404).json({
-                error: `No registered Heron account found for ${cleanEmail}. Please Sign Up for an account first.`
+            // Anti-enumeration: Return generic success message without leaking account presence
+            return res.json({
+                message: `If this account exists for ${cleanEmail}, a 6-digit password reset OTP has been sent. Please check your inbox.`,
+                email: cleanEmail
             });
         }
 

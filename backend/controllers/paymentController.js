@@ -1,7 +1,4 @@
-/**
- * Payment Controller
- * Handles PayMongo REST API checkout creation, session status verification, and payment webhooks.
- */
+
 
 const paymongoService = require('../services/paymongoService');
 const { handleServerError } = require('../utils/errorHandler');
@@ -12,12 +9,16 @@ const VALID_PAYMENT_METHODS = ['gcash', 'paymaya', 'qrph', 'card'];
 
 // Create PayMongo Checkout Session
 const createCheckoutSession = async (req, res) => {
-  const { amount, description, referenceNo, returnUrl, paymentMethod } = req.body;
+  const { description, referenceNo, returnUrl, paymentMethod } = req.body;
   const user = req.user; // attached by authenticateToken middleware
 
   if (!user) {
     return res.status(401).json({ error: 'Authentication required to initiate payment.' });
   }
+
+  // Security enforcement: Official UMak sticker fee is strictly ₱200.00.
+  // Overrides any client-supplied amount to prevent parameter tampering.
+  const verifiedAmount = 200.00;
 
   const cleanRefNo = referenceNo || `PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
   const defaultReturnUrl = returnUrl || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`;
@@ -31,7 +32,7 @@ const createCheckoutSession = async (req, res) => {
 
   try {
     const checkoutData = await paymongoService.createCheckoutSession({
-      amount: amount || 200.00,
+      amount: verifiedAmount,
       description: description || 'iPark UMAK Vehicle Parking Sticker Fee (1 Year)',
       applicantName: user.name,
       email: user.email,

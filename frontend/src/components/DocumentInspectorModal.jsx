@@ -39,14 +39,23 @@ export const DocumentInspectorModal = ({ isOpen, onClose, application }) => {
           {docs.map((doc, idx) => {
             const isPdf = doc.path && doc.path.toLowerCase().endsWith('.pdf');
             
-            // Helper to format document URL
+            // Helper to format document URL with Data Privacy token authorization
             const getDocUrl = (pathStr) => {
               if (!pathStr) return null;
-              if (pathStr.startsWith('http://') || pathStr.startsWith('https://')) return pathStr;
-              if (pathStr.startsWith('/uploads/') && !pathStr.startsWith('/uploads/documents/')) {
-                return `${API_BASE_URL}/uploads/documents/${pathStr.replace('/uploads/', '')}`;
+              const token = localStorage.getItem('ipark_token') || '';
+              const authParam = token ? `?token=${encodeURIComponent(token)}` : '';
+
+              let base = pathStr;
+              if (pathStr.startsWith('http://') || pathStr.startsWith('https://')) {
+                base = pathStr;
+              } else if (pathStr.startsWith('/uploads/') && !pathStr.startsWith('/uploads/documents/')) {
+                base = `${API_BASE_URL}/uploads/documents/${pathStr.replace('/uploads/', '')}`;
+              } else {
+                base = `${API_BASE_URL}${pathStr}`;
               }
-              return `${API_BASE_URL}${pathStr}`;
+
+              if (!token) return base;
+              return base.includes('?') ? `${base}&token=${encodeURIComponent(token)}` : `${base}${authParam}`;
             };
 
             const fullUrl = getDocUrl(doc.path);

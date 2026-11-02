@@ -47,10 +47,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(sanitizeInputs);
 app.use('/api', globalLimiter);
 
-// Serve uploaded documents statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/uploads/documents', express.static(path.join(__dirname, 'uploads/documents')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads/documents')));
+// Secure document serving endpoint with authentication & Data Privacy Act enforcement
+const { serveProtectedDocument } = require('./middleware/documentAuthMiddleware');
+app.get('/uploads/documents/:filename', serveProtectedDocument);
+app.get('/uploads/:filename', serveProtectedDocument);
 
 app.use('/api', parkingRoutes);
 app.use('/api/auth', authRoutes);
