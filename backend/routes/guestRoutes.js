@@ -12,6 +12,8 @@ router.get('/user/:email', authenticateToken, guestController.getReservationsByE
 // Admin only
 router.get('/admin/all', authenticateToken, requireRole('admin'), guestController.getAllReservationsAdmin);
 router.post('/admin/update-status', authenticateToken, requireRole('admin'), guestController.updateReservationStatusAdmin);
+router.post('/admin/claim-card', authenticateToken, requireRole('admin'), guestController.claimCard);
+router.post('/admin/surrender-card', authenticateToken, requireRole('admin'), guestController.surrenderCard);
+router.get('/admin/available-cards', authenticateToken, requireRole('admin'), guestController.getAvailableCards);
 
 module.exports = router;
-

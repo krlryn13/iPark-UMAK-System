@@ -13,6 +13,7 @@ import { getStatusConfig, getGuestStatusConfig, getActionMessage } from '../util
 import { AnalyticsTab } from '../components/admin/AnalyticsTab';
 import { AuditLogsTab } from '../components/admin/AuditLogsTab';
 import { ReportsTab } from '../components/admin/ReportsTab';
+import { DioramaTab } from '../components/admin/DioramaTab';
 
 export const AdminDashboard = () => {
   const { currentUser, logoutUser, loading: authLoading, authFetch } = useAuth();
@@ -493,6 +494,17 @@ export const AdminDashboard = () => {
           >
             <i className="fa-solid fa-file-pdf text-umak-orange"></i>
             <span>Reports (PDF)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('diorama')}
+            className={`flex-1 min-w-[200px] py-3 px-5 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${activeAdminTab === 'diorama'
+                ? 'bg-umak-navy text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+          >
+            <i className="fa-solid fa-microchip text-emerald-400"></i>
+            <span>ESP32 Diorama & Gates</span>
           </button>
         </div>
 
@@ -1232,6 +1244,14 @@ export const AdminDashboard = () => {
             authFetch={authFetch}
             apiBaseUrl={API_BASE_URL}
             adminName={currentUser?.name || 'OHSO Administrator'}
+            showToast={showToast}
+          />
+        )}
+
+        {/* ===== SECTION 8: ESP32 DIORAMA GATEWAY & HARDWARE CONTROLS ===== */}
+        {activeAdminTab === 'diorama' && (
+          <DioramaTab
+            authFetch={authFetch}
             showToast={showToast}
           />
         )}

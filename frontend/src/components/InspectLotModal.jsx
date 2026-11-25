@@ -58,8 +58,19 @@ export const InspectLotModal = ({ selectedLot, onClose, onOpenDirections }) => {
 
         {/* Visual slot representation */}
         <div>
-          <p className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-2">
-            <i className="fa-solid fa-table-cells text-umak-orange"></i> Live Parking Grid Simulation
+          <p className="text-xs font-bold text-slate-700 mb-3 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <i className="fa-solid fa-table-cells text-umak-orange"></i> Parking Slot Layout
+            </span>
+            {selectedLot.hardware_monitored ? (
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-300">
+                <i className="fa-solid fa-microchip mr-1"></i>Slot 1: Hardware Monitored
+              </span>
+            ) : (
+              <span className="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded border border-purple-300">
+                <i className="fa-solid fa-cloud mr-1"></i>Simulated Slots
+              </span>
+            )}
           </p>
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-h-60 overflow-y-auto touch-scroll p-2 bg-slate-50 rounded-xl border border-slate-200">
             {selectedLot.slotsList && selectedLot.slotsList.length > 0 ? (

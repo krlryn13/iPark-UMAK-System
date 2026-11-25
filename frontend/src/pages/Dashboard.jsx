@@ -16,7 +16,7 @@ import { API_BASE_URL } from '../config/api';
 export const Dashboard = () => {
   const { currentUser, logoutUser, loading: authLoading, authFetch } = useAuth();
   const navigate = useNavigate();
-  const { lots } = useParkingData();
+  const { lots, deviceState } = useParkingData();
 
   const isAdmin = currentUser?.role === 'admin';
 
@@ -181,6 +181,44 @@ export const Dashboard = () => {
       <Navbar />
 
       <main className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full my-auto space-y-8">
+
+        {/* DEVICE STATUS BANNER (ESP32 DIORAMA GATEWAY) */}
+        <div className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm ${
+          deviceState?.online 
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950' 
+            : 'bg-rose-500/10 border-rose-500/30 text-rose-950'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-3 h-3 rounded-full ${deviceState?.online ? 'bg-emerald-500 animate-ping' : 'bg-rose-500'}`} />
+            <div>
+              <p className="text-xs font-bold flex items-center gap-2">
+                <i className="fa-solid fa-microchip"></i>
+                ESP32 Diorama Hardware Status: 
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-extrabold uppercase ${
+                  deviceState?.online ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'
+                }`}>
+                  {deviceState?.online ? 'ONLINE' : 'DEVICE OFFLINE'}
+                </span>
+                {deviceState?.online && (
+                  <span className="text-[11px] font-normal text-emerald-800">
+                    (Heartbeat {deviceState.sec_since_heartbeat || 0}s ago)
+                  </span>
+                )}
+              </p>
+              <p className="text-[11px] opacity-80 mt-0.5">
+                {deviceState?.online 
+                  ? `Hardware Capacity: ${deviceState.capacity} | Inside: ${deviceState.inside} | Parked: ${deviceState.parked} | Walk-in Free: ${deviceState.free} | Reserved: ${deviceState.reserved}`
+                  : 'ESP32 device heartbeat not received in >15s. Gates operate autonomously via offline rules.'}
+              </p>
+            </div>
+          </div>
+          {deviceState?.active_warnings && (
+            <span className="px-3 py-1 bg-amber-500/20 text-amber-900 border border-amber-400 text-[11px] font-bold rounded-lg flex items-center gap-1.5">
+              <i className="fa-solid fa-triangle-exclamation text-amber-600"></i>
+              Warning: {deviceState.active_warnings}
+            </span>
+          )}
+        </div>
 
         {/* Welcome Header */}
         <div className="bg-gradient-to-r from-umak-navy to-slate-900 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">

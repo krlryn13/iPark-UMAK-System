@@ -122,6 +122,7 @@ export const useParkingData = () => {
   const [liveData, setLiveData] = useState({
     lots: [],
     slots: [],
+    deviceState: null,
     loading: true,
     error: null
   });
@@ -129,13 +130,19 @@ export const useParkingData = () => {
   useEffect(() => {
     const fetchParkingData = async () => {
       try {
-        const [lotsRes, slotsRes] = await Promise.allSettled([
+        const [lotsRes, slotsRes, stateRes] = await Promise.allSettled([
           fetch(`${API_BASE_URL}/api/lots`),
-          fetch(`${API_BASE_URL}/api/slots`)
+          fetch(`${API_BASE_URL}/api/slots`),
+          fetch(`${API_BASE_URL}/api/device/state`)
         ]);
 
         let fetchedLots = [];
         let fetchedSlots = [];
+        let deviceState = null;
+
+        if (stateRes.status === 'fulfilled' && stateRes.value.ok) {
+          deviceState = await stateRes.value.json();
+        }
 
         if (lotsRes.status === 'fulfilled' && lotsRes.value.ok) {
           const resData = await lotsRes.value.json();
@@ -185,6 +192,7 @@ export const useParkingData = () => {
         setLiveData({
           lots: processedLots,
           slots: slotsBase,
+          deviceState,
           loading: false,
           error: null
         });
@@ -195,6 +203,7 @@ export const useParkingData = () => {
             slotsList: defaultSlots.filter(s => s.lot_id === lot.id)
           })),
           slots: defaultSlots,
+          deviceState: null,
           loading: false,
           error: null
         });
@@ -202,7 +211,7 @@ export const useParkingData = () => {
     };
 
     fetchParkingData();
-    const interval = setInterval(fetchParkingData, 15000);
+    const interval = setInterval(fetchParkingData, 5000);
     return () => clearInterval(interval);
   }, []);
 
