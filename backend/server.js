@@ -122,12 +122,14 @@ app.listen(PORT, async () => {
         const { initStickersDB } = require('./init_stickers_db');
         const { initAuditDB } = require('./init_audit_db');
         const { seedHPSB } = require('./seed_hpsb');
+        const { migrateDeviceRFID } = require('./migrate_device_rfid');
         
         await initAuthDB();
         await initGuestDB();
         await initStickersDB();
         await initAuditDB();
         await seedHPSB();
+        await migrateDeviceRFID();
         console.log('✓ Automatic Cloud DB Table Initialization & Seeding Completed!');
     } catch (dbInitErr) {
         console.error('[DB AUTO INIT ERROR]', dbInitErr.message);

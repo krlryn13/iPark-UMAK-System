@@ -13,13 +13,14 @@ const createApplication = (stickerData, callback) => {
     cr_number,
     license_number,
     amount = 200.00,
-    payment_method,
-    payment_ref_no,
-    payment_status = 'paid',
+    payment_method = null,
+    payment_ref_no = null,
+    payment_status = 'unpaid',
     student_id_doc = null,
     or_cr_doc = null,
     license_doc = null,
-    payment_proof_doc = null
+    payment_proof_doc = null,
+    status = 'pending_review'
   } = stickerData;
 
   db.query(
@@ -27,11 +28,11 @@ const createApplication = (stickerData, callback) => {
       user_id, applicant_name, email, student_id_num, vehicle_type, vehicle_make,
       plate_number, or_number, cr_number, license_number, amount, payment_method,
       payment_ref_no, payment_status, student_id_doc, or_cr_doc, license_doc, payment_proof_doc, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       user_id, applicant_name, email, student_id_num, vehicle_type, vehicle_make,
       plate_number, or_number, cr_number, license_number, amount, payment_method,
-      payment_ref_no, payment_status, student_id_doc, or_cr_doc, license_doc, payment_proof_doc
+      payment_ref_no, payment_status, student_id_doc, or_cr_doc, license_doc, payment_proof_doc, status
     ],
     callback
   );

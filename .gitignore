@@ -29,3 +29,6 @@ scratch/
 # Firmware secrets & backups
 firmware/**/config.h
 backup_snapshot/
+
+# Local Word documentation
+docs/

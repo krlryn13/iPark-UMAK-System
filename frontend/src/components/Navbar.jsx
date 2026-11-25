@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -6,56 +6,54 @@ export const Navbar = () => {
   const { currentUser, logoutUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isDashboard = location.pathname === '/dashboard';
   const isAdminPage = location.pathname === '/admin';
   const isHome = location.pathname === '/';
   const isLogin = location.pathname === '/login';
 
-  // Helper: get actual navbar pixel height at runtime
   const getNavbarHeight = () => {
     const nav = document.getElementById('main-navbar');
-    return nav ? nav.offsetHeight : 116;
+    return nav ? nav.offsetHeight : 108;
   };
 
-  // Set CSS variable for navbar height
-  React.useEffect(() => {
+  useEffect(() => {
     const updateNavbarHeight = () => {
       const nav = document.getElementById('main-navbar');
       if (nav) {
         document.documentElement.style.setProperty('--navbar-h', `${nav.offsetHeight}px`);
       }
     };
-    
+
     updateNavbarHeight();
     window.addEventListener('resize', updateNavbarHeight, { passive: true });
     return () => window.removeEventListener('resize', updateNavbarHeight);
-  }, []);
+  }, [mobileMenuOpen]);
 
+  const [activeSection, setActiveSection] = useState('home');
+  const [isManualScrolling, setIsManualScrolling] = useState(false);
 
+  useEffect(() => {
+    if (!isManualScrolling) return;
+    const timer = setTimeout(() => setIsManualScrolling(false), 850);
+    return () => clearTimeout(timer);
+  }, [isManualScrolling]);
 
-  // ScrollSpy state for active section on landing page
-  const [activeSection, setActiveSection] = React.useState('home');
-  const isManualScrollingRef = React.useRef(false);
-  const scrollTimeoutRef = React.useRef(null);
-
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isHome) return;
 
     const sections = ['home', 'sticker-guide', 'features', 'about', 'team'];
 
     const updateActiveSection = () => {
-      if (isManualScrollingRef.current) return;
+      if (isManualScrolling) return;
 
       const navH = getNavbarHeight();
-
       if (window.scrollY < navH + 20) {
         setActiveSection('home');
         return;
       }
 
-      // Check which section is currently visible right below the navbar
       const checkPoint = window.scrollY + navH + 40;
       let active = 'home';
 
@@ -88,13 +86,13 @@ export const Navbar = () => {
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', handleScroll);
     };
-  }, [isHome]);
+  }, [isHome, isManualScrolling]);
 
   const navItems = [
     { id: 'home', label: 'Home', icon: 'fa-house' },
-    { id: 'sticker-guide', label: 'Sticker Guide (₱200)', icon: 'fa-id-card' },
+    { id: 'sticker-guide', label: 'Sticker Guide', icon: 'fa-id-card' },
     { id: 'features', label: 'Features', icon: 'fa-layer-group' },
-    { id: 'about', label: 'About & Objectives', icon: 'fa-circle-info' },
+    { id: 'about', label: 'About', icon: 'fa-circle-info' },
     { id: 'team', label: 'Our Team', icon: 'fa-users-gear' },
   ];
 
@@ -106,13 +104,8 @@ export const Navbar = () => {
     }
     if (e) e.preventDefault();
 
-    isManualScrollingRef.current = true;
+    setIsManualScrolling(true);
     setActiveSection(sectionId);
-
-    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    scrollTimeoutRef.current = setTimeout(() => {
-      isManualScrollingRef.current = false;
-    }, 850);
 
     if (sectionId === 'home') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -130,113 +123,129 @@ export const Navbar = () => {
 
   const handleNavClick = (targetPath, e) => {
     setMobileMenuOpen(false);
-    if (location.pathname === targetPath || targetPath === '/') {
-      if (location.pathname === '/' && targetPath === '/') {
-        e.preventDefault();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        setActiveSection('home');
-      }
+    if (location.pathname === '/' && targetPath === '/') {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setActiveSection('home');
     }
   };
 
   return (
     <div id="main-navbar" className="sticky top-0 z-50 w-full shadow-sm">
-      {/* TOP ANNOUNCEMENT BAR */}
-      <div className="bg-umak-navydark text-xs py-2.5 px-4 text-slate-200 flex justify-between items-center shadow-inner">
-        <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-semibold text-[11px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-              Live Campus Feed
+      {/* TOP UMAK CAMPUS INFO BAR */}
+      <div className="bg-umak-navydark text-[11px] sm:text-xs py-2 px-3 sm:px-4 text-slate-200 border-b border-white/10">
+        <div className="max-w-7xl 2xl:max-w-[1360px] mx-auto w-full flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-amber-300 border border-white/15 font-semibold text-[10px] sm:text-[11px] shrink-0">
+              <i className="fa-solid fa-shield-halved text-umak-orange"></i>
+              <span>OHSO &amp; HPSB</span>
             </span>
-            <span className="hidden sm:inline text-slate-300 font-medium">University of Makati Campus Parking Operations</span>
+            <span className="hidden sm:inline text-slate-300 font-medium truncate">
+              University of Makati Campus Parking Operations
+            </span>
           </div>
-          <div className="flex items-center gap-4 text-slate-300">
+          <div className="flex items-center gap-4 text-slate-300 shrink-0">
             <span className="flex items-center gap-1.5 font-medium text-[11px] sm:text-xs">
-              <i className="fa-solid fa-building-columns text-umak-orange"></i> UMak Main Campus
+              <i className="fa-solid fa-building-columns text-umak-orange"></i>
+              <span className="truncate">UMak Main Campus</span>
             </span>
             <span className="hidden md:flex items-center gap-1.5 text-slate-400">
-              <i className="fa-solid fa-clock text-slate-400"></i> Updated Real-time
+              <i className="fa-solid fa-square-parking text-umak-orange/80"></i> Levels 1–4
             </span>
           </div>
         </div>
       </div>
 
-      {/* FLOATING LIGHT GLASS NAVBAR */}
+      {/* MAIN NAVIGATION BAR */}
       <header className="backdrop-blur-xl bg-white/95 border-b border-slate-200/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-
-          {/* BRAND LOGO TEXT */}
+        <div className="max-w-7xl 2xl:max-w-[1360px] mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-[72px] lg:h-20 flex items-center justify-between gap-2 sm:gap-4">
+          {/* BRAND LOGO */}
           <Link
-            to={currentUser ? "/dashboard" : "/"}
-            onClick={(e) => handleNavClick(currentUser ? "/dashboard" : "/", e)}
-            className="flex items-center gap-3 group"
+            to={currentUser ? '/dashboard' : '/'}
+            onClick={(e) => handleNavClick(currentUser ? '/dashboard' : '/', e)}
+            className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0 group"
           >
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-display font-extrabold text-2xl tracking-tight text-umak-navy">iPark</span>
-                <span className="px-2 py-0.5 text-xs font-extrabold bg-umak-orange text-white rounded-md shadow-sm">UMAK</span>
+                <span className="font-display font-extrabold text-xl sm:text-2xl tracking-tight text-umak-navy">
+                  iPark
+                </span>
+                <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-extrabold bg-umak-orange text-white rounded-md shadow-xs">
+                  UMAK
+                </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-semibold tracking-wider uppercase">Smart Campus Parking</p>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-semibold tracking-wider uppercase truncate">
+                Smart Campus Parking
+              </p>
             </div>
           </Link>
 
-          {/* DESKTOP NAV LINKS */}
-          <nav className="hidden md:flex items-center gap-2 text-sm font-semibold text-slate-600">
+          {/* DESKTOP NAV LINKS (lg+ so tablets never wrap or collide) */}
+          <nav className="hidden lg:flex items-center gap-1 xl:gap-1.5 text-xs xl:text-sm font-semibold text-slate-600" aria-label="Main navigation">
             {currentUser ? (
               <>
                 <Link
                   to="/dashboard"
-                  onClick={(e) => handleNavClick("/dashboard", e)}
-                  className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-2 ${isDashboard ? 'bg-umak-navy text-white font-extrabold shadow-sm' : 'hover:text-umak-navy hover:bg-slate-50'}`}
+                  onClick={(e) => handleNavClick('/dashboard', e)}
+                  className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
+                    isDashboard
+                      ? 'bg-umak-navy text-white font-extrabold shadow-sm'
+                      : 'hover:text-umak-navy hover:bg-slate-100/80'
+                  }`}
                 >
-                  <i className="fa-solid fa-gauge text-xs text-umak-orange"></i> Live Operations Dashboard
+                  <i className={`fa-solid fa-gauge text-xs ${isDashboard ? 'text-umak-orange' : 'text-umak-orange'}`}></i>
+                  <span>Live Operations Dashboard</span>
                 </Link>
-                
+
                 {currentUser.role === 'admin' && (
                   <Link
                     to="/admin"
-                    onClick={(e) => handleNavClick("/admin", e)}
-                    className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-2 ${isAdminPage ? 'bg-amber-500 text-white font-extrabold shadow-sm' : 'hover:text-amber-600 hover:bg-slate-50'}`}
+                    onClick={(e) => handleNavClick('/admin', e)}
+                    className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
+                      isAdminPage
+                        ? 'bg-amber-500 text-white font-extrabold shadow-sm'
+                        : 'hover:text-amber-600 hover:bg-slate-100/80'
+                    }`}
                   >
-                    <i className="fa-solid fa-shield-halved text-xs text-white"></i> OHSO Admin Portal
+                    <i className={`fa-solid fa-shield-halved text-xs ${isAdminPage ? 'text-white' : 'text-amber-500'}`}></i>
+                    <span>OHSO Admin Portal</span>
                   </Link>
                 )}
               </>
             ) : (
-              <>
-                {navItems.map((item) => {
-                  const isActive = isHome && activeSection === item.id;
-                  return (
-                    <a
-                      key={item.id}
-                      href={`/#${item.id}`}
-                      onClick={(e) => handleSectionClick(item.id, e)}
-                      className={`px-3.5 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer outline-none focus:outline-none focus:ring-0 ${
-                        isActive
-                          ? 'bg-umak-navy text-white font-extrabold shadow-sm'
-                          : 'text-slate-600 font-semibold hover:text-slate-900 hover:bg-slate-100/80'
-                      }`}
-                    >
-                      <i className={`fa-solid ${item.icon} text-xs ${isActive ? 'text-umak-orange' : 'text-umak-orange opacity-70'}`}></i>
-                      <span>{item.label}</span>
-                    </a>
-                  );
-                })}
-              </>
+              navItems.map((item) => {
+                const isActive = isHome && activeSection === item.id;
+                return (
+                  <a
+                    key={item.id}
+                    href={`/#${item.id}`}
+                    onClick={(e) => handleSectionClick(item.id, e)}
+                    className={`px-3 xl:px-3.5 py-2 rounded-xl transition-all duration-200 flex items-center gap-1.5 xl:gap-2 cursor-pointer whitespace-nowrap outline-none focus:outline-none ${
+                      isActive
+                        ? 'bg-umak-navy text-white font-extrabold shadow-sm'
+                        : 'text-slate-600 font-semibold hover:text-slate-900 hover:bg-slate-100/80'
+                    }`}
+                  >
+                    <i className={`fa-solid ${item.icon} text-xs ${isActive ? 'text-umak-orange' : 'text-umak-orange/80'}`}></i>
+                    <span>{item.label}</span>
+                  </a>
+                );
+              })
             )}
           </nav>
 
-          {/* LOGIN / USER ACCOUNT CTA + MOBILE HAMBURGER TOGGLE */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* CTA + MOBILE/TABLET MENU TOGGLE */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {currentUser ? (
-              <div className="flex items-center gap-2 sm:gap-3 bg-slate-100 p-1 sm:p-1.5 sm:pl-3 rounded-xl border border-slate-200">
-                <div className="flex items-center gap-2 text-xs">
-                  <div className="w-8 h-8 rounded-lg bg-umak-navy text-white font-bold flex items-center justify-center text-xs">
+              <div className="flex items-center gap-1.5 sm:gap-3 bg-slate-100 p-1 sm:p-1.5 sm:pl-3 rounded-xl border border-slate-200 min-w-0">
+                <div className="flex items-center gap-2 text-xs min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-umak-navy text-white font-bold flex items-center justify-center text-xs shrink-0">
                     {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'H'}
                   </div>
-                  <div className="text-left hidden sm:block">
-                    <p className="font-bold text-slate-900 leading-tight">{currentUser.name}</p>
+                  <div className="text-left hidden sm:block min-w-0">
+                    <p className="font-bold text-slate-900 leading-tight max-w-[120px] xl:max-w-[160px] truncate">
+                      {currentUser.name}
+                    </p>
                     <p className="text-[10px] text-slate-500 font-mono capitalize">{currentUser.role || 'Heron'}</p>
                   </div>
                 </div>
@@ -252,10 +261,10 @@ export const Navbar = () => {
             ) : (
               <button
                 onClick={() => navigate('/login')}
-                className={`relative inline-flex items-center justify-center px-3.5 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white transition-all duration-200 rounded-xl shadow-md cursor-pointer min-h-[40px] ${
+                className={`inline-flex items-center justify-center px-3 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white transition-all duration-200 rounded-xl shadow-md cursor-pointer min-h-[40px] whitespace-nowrap ${
                   isLogin
                     ? 'bg-umak-orange shadow-orange-500/25'
-                    : 'bg-gradient-to-r from-umak-navy to-umak-navydark hover:from-umak-orange hover:to-amber-600'
+                    : 'bg-umak-navy hover:bg-umak-orange'
                 }`}
               >
                 <i className="fa-solid fa-right-to-bracket mr-1.5 sm:mr-2"></i>
@@ -263,62 +272,74 @@ export const Navbar = () => {
               </button>
             )}
 
-            {/* Mobile Hamburger Button */}
+            {/* Mobile & Tablet Hamburger Button */}
             <button
+              type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle mobile menu"
-              className="md:hidden w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center text-base hover:bg-slate-200 transition-colors min-h-[40px]"
+              aria-label="Toggle navigation menu"
+              aria-expanded={mobileMenuOpen}
+              className="lg:hidden w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center text-base hover:bg-slate-200 transition-colors cursor-pointer shrink-0"
             >
               <i className={`fa-solid ${mobileMenuOpen ? 'fa-xmark' : 'fa-bars'}`}></i>
             </button>
           </div>
         </div>
 
-        {/* MOBILE SLIDE-DOWN NAVIGATION OVERLAY */}
+        {/* MOBILE & TABLET SLIDE-DOWN NAVIGATION */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-white border-b border-slate-200 px-4 py-4 space-y-3 shadow-xl animate-in slide-in-from-top duration-200">
-            {currentUser ? (
-              <div className="space-y-2">
-                <Link
-                  to="/dashboard"
-                  onClick={(e) => handleNavClick("/dashboard", e)}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 font-bold text-sm text-umak-navy border border-slate-100"
-                >
-                  <i className="fa-solid fa-gauge text-umak-orange"></i> Live Operations Dashboard
-                </Link>
-
-                {currentUser.role === 'admin' && (
+          <div className="lg:hidden bg-white border-t border-slate-200 px-3 sm:px-6 py-3.5 space-y-2 shadow-xl animate-in slide-in-from-top duration-200">
+            <div className="max-w-7xl mx-auto">
+              {currentUser ? (
+                <div className="space-y-2">
                   <Link
-                    to="/admin"
-                    onClick={(e) => handleNavClick("/admin", e)}
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-amber-50 font-bold text-sm text-amber-700 border border-amber-100"
+                    to="/dashboard"
+                    onClick={(e) => handleNavClick('/dashboard', e)}
+                    className={`flex items-center gap-3 p-3 rounded-xl font-bold text-sm border min-h-[44px] ${
+                      isDashboard
+                        ? 'bg-umak-navy text-white border-umak-navy'
+                        : 'hover:bg-slate-50 text-umak-navy border-slate-100'
+                    }`}
                   >
-                    <i className="fa-solid fa-shield-halved text-amber-500"></i> OHSO Admin Portal
+                    <i className="fa-solid fa-gauge text-umak-orange"></i> Live Operations Dashboard
                   </Link>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-1.5 font-semibold text-xs text-slate-700">
-                {navItems.map((item) => {
-                  const isActive = isHome && activeSection === item.id;
-                  return (
-                    <a
-                      key={item.id}
-                      href={`/#${item.id}`}
-                      onClick={(e) => handleSectionClick(item.id, e)}
-                      className={`flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer outline-none focus:outline-none ${
-                        isActive
-                          ? 'bg-umak-navy text-white font-extrabold shadow-sm'
-                          : 'hover:bg-slate-50 border border-slate-100 text-slate-700 font-semibold'
+
+                  {currentUser.role === 'admin' && (
+                    <Link
+                      to="/admin"
+                      onClick={(e) => handleNavClick('/admin', e)}
+                      className={`flex items-center gap-3 p-3 rounded-xl font-bold text-sm border min-h-[44px] ${
+                        isAdminPage
+                          ? 'bg-amber-500 text-white border-amber-500'
+                          : 'hover:bg-amber-50 text-amber-700 border-amber-100'
                       }`}
                     >
-                      <i className={`fa-solid ${item.icon} text-umak-orange`}></i>
-                      <span>{item.label}</span>
-                    </a>
-                  );
-                })}
-              </div>
-            )}
+                      <i className={`fa-solid fa-shield-halved ${isAdminPage ? 'text-white' : 'text-amber-500'}`}></i> OHSO Admin Portal
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-semibold text-xs sm:text-sm text-slate-700">
+                  {navItems.map((item) => {
+                    const isActive = isHome && activeSection === item.id;
+                    return (
+                      <a
+                        key={item.id}
+                        href={`/#${item.id}`}
+                        onClick={(e) => handleSectionClick(item.id, e)}
+                        className={`flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer min-h-[44px] ${
+                          isActive
+                            ? 'bg-umak-navy text-white font-extrabold shadow-sm'
+                            : 'hover:bg-slate-50 border border-slate-200/80 text-slate-700 font-semibold'
+                        }`}
+                      >
+                        <i className={`fa-solid ${item.icon} text-umak-orange w-4 text-center`}></i>
+                        <span>{item.label}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </header>

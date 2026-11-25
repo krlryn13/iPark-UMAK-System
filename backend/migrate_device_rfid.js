@@ -1,6 +1,6 @@
 const db = require('./config/db');
 
-async function migrate() {
+async function migrateDeviceRFID() {
   const p = db.promise();
   console.log('Running device and RFID database migrations...');
 
@@ -85,11 +85,16 @@ async function migrate() {
     ON DUPLICATE KEY UPDATE assigned_name=VALUES(assigned_name);
   `);
 
-  console.log('✓ Migration executed successfully!');
-  process.exit(0);
+  console.log('✓ Device & RFID migration executed successfully!');
 }
 
-migrate().catch(err => {
-  console.error('Migration failed:', err);
-  process.exit(1);
-});
+module.exports = { migrateDeviceRFID };
+
+if (require.main === module) {
+  migrateDeviceRFID()
+    .then(() => process.exit(0))
+    .catch(err => {
+      console.error('Migration failed:', err);
+      process.exit(1);
+    });
+}
