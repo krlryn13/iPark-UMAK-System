@@ -15,6 +15,15 @@ export const ParkingLotCard = ({ lot, onInspect, onOpenDirections }) => {
             <span className="px-2.5 py-1 text-[11px] font-mono font-bold rounded-md bg-slate-100 text-umak-navy border border-slate-200 inline-block">
               {lot.code || `HPSB-L${lot.id}`}
             </span>
+            {lot.hardware_monitored ? (
+              <span className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-emerald-800 border border-emerald-300 inline-block">
+                <i className="fa-solid fa-microchip mr-1"></i>Hardware Monitored
+              </span>
+            ) : (
+              <span className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded bg-purple-100 text-purple-800 border border-purple-300 inline-block">
+                <i className="fa-solid fa-cloud mr-1"></i>Simulated Floor
+              </span>
+            )}
             <h3 className="text-xl font-bold font-display text-slate-900 mt-2.5 group-hover:text-umak-orange transition-colors">
               {lot.name}
             </h3>

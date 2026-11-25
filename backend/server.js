@@ -15,6 +15,7 @@ const stickerRoutes = require('./routes/stickerRoutes');
 const guestRoutes = require('./routes/guestRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const deviceRoutes = require('./routes/deviceRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -26,6 +27,8 @@ const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
     'http://127.0.0.1:5173',
+    'http://192.168.1.13:5173',
+    'http://192.168.1.13:5174',
     process.env.FRONTEND_URL
 ].filter(Boolean).map(url => url.replace(/\/+$/, ''));
 
@@ -58,6 +61,7 @@ app.use('/api/stickers', stickerRoutes);
 app.use('/api/guests', guestRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/device', deviceRoutes);
 
 // Diagnostic DB Health Check endpoint (Safe generic response)
 app.get('/api/db-health', (req, res) => {
