@@ -3,7 +3,8 @@ import React from 'react';
 export const ParkingLotCard = ({ lot, onInspect, onOpenDirections }) => {
   const available = lot.availableSlots !== undefined ? lot.availableSlots : (lot.totalSlots - lot.occupiedSlots);
   const occupied = lot.occupiedSlots || 0;
-  const percentage = Math.round((occupied / lot.totalSlots) * 100);
+  const total = lot.totalSlots || (available + occupied) || 0;
+  const percentage = total > 0 ? Math.min(100, Math.round((occupied / total) * 100)) : 0;
   const isFull = available === 0;
 
   return (
@@ -61,7 +62,7 @@ export const ParkingLotCard = ({ lot, onInspect, onOpenDirections }) => {
         <div className="my-5 bg-slate-50 p-4 rounded-xl border border-slate-200">
           <div className="flex justify-between items-center text-xs mb-2">
             <span className="text-slate-600 font-semibold">Occupancy Load</span>
-            <span className="font-mono font-bold text-slate-900">{percentage}% ({occupied}/{lot.totalSlots})</span>
+            <span className="font-mono font-bold text-slate-900">{percentage}% ({occupied}/{total})</span>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
             <div

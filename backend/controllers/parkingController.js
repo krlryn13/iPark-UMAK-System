@@ -19,8 +19,9 @@ const getLots = async (req, res) => {
                 ...lot,
                 is_simulated: !isRealSlot,
                 hardware_monitored: isRealSlot,
+                hardware_slots: isRealSlot ? 1 : 0,
                 device_online: isDeviceOnline,
-                total_slots: isRealSlot ? 1 : lot.total_slots // Level 1 and 2 each have 1 real ultrasonic slot in diorama
+                total_slots: lot.total_slots
             };
         });
 

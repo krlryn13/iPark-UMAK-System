@@ -162,8 +162,9 @@ export const useParkingData = () => {
         const slotsBase = fetchedSlots.length > 0 ? fetchedSlots : defaultSlots;
 
         const processedLots = lotsBase.map(lot => {
-          const totalSlots = Number(lot.total_slots || lot.totalSlots || 0);
           const lotSlots = slotsBase.filter(s => Number(s.lot_id) === Number(lot.id));
+          const rawTotal = Number(lot.total_slots || lot.totalSlots || 0);
+          const totalSlots = lotSlots.length > 0 ? Math.max(rawTotal, lotSlots.length) : rawTotal;
 
           let occupiedCount = 0;
           let availableCount = 0;

@@ -1052,7 +1052,8 @@ export const AdminDashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
               {lots.map((lot) => {
                 const free = lot.availableSlots !== undefined ? lot.availableSlots : (lot.totalSlots - lot.occupiedSlots);
-                const percent = Math.round(((lot.occupiedSlots || 0) / lot.totalSlots) * 100);
+                const total = lot.totalSlots || (free + (lot.occupiedSlots || 0)) || 0;
+                const percent = total > 0 ? Math.min(100, Math.round(((lot.occupiedSlots || 0) / total) * 100)) : 0;
                 return (
                   <div key={lot.id} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 flex flex-col justify-between h-full">
                     <div>
